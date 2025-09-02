@@ -1,17 +1,17 @@
 {
     "name": "rbraunm/class_dicom",
-    "description": "PHP DICOM File Handler Class by Dean Vaughan",
+    "description": "PHP DICOM minimal file handler",
     "type": "library",
     "require": {
     },
     "license": "MIT",
     "authors": [
-        {
-            "name": "Dean Vaughan"
-        },
 		{
             "name": "Randy Braunm",
             "email": "randy.braunm@gmail.com"
+        },
+        {
+            "name": "Dean Vaughan"
         }
     ],
     "minimum-stability": "stable"
