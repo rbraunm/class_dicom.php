@@ -29,8 +29,8 @@ if(RUNNING_WINDOWS) {
   define('BIN_ECHOSCU', TOOLKIT_DIR . '/echoscu.exe');
   define('BIN_DCMJ2PNM', TOOLKIT_DIR . '/dcmj2pnm.exe');
   define('BIN_DCMODIFY', TOOLKIT_DIR . '/dcmodify.exe');
-  define('BIN_DCMCJPEG', TOOLKIT_DIR . '/dcmdjpeg.exe');
-  define('BIN_DCMDJPEG', TOOLKIT_DIR . '/dcmcjpeg.exe');
+  define('BIN_DCMCJPEG', TOOLKIT_DIR . '/dcmcjpeg.exe');
+  define('BIN_DCMDJPEG', TOOLKIT_DIR . '/dcmdjpeg.exe');
   define('BIN_XML2DCM', TOOLKIT_DIR . '/xml2dcm.exe');
   define('BIN_IMG2DCM', TOOLKIT_DIR . '/img2dcm.exe');
 }
@@ -41,8 +41,8 @@ else {
   define('BIN_ECHOSCU', TOOLKIT_DIR . '/echoscu');
   define('BIN_DCMJ2PNM', TOOLKIT_DIR . '/dcmj2pnm');
   define('BIN_DCMODIFY', TOOLKIT_DIR . '/dcmodify');
-  define('BIN_DCMCJPEG', TOOLKIT_DIR . '/dcmdjpeg');
-  define('BIN_DCMDJPEG', TOOLKIT_DIR . '/dcmcjpeg');
+  define('BIN_DCMCJPEG', TOOLKIT_DIR . '/dcmcjpeg');
+  define('BIN_DCMDJPEG', TOOLKIT_DIR . '/dcmdjpeg');
   define('BIN_XML2DCM', TOOLKIT_DIR . '/xml2dcm');
   define('BIN_IMG2DCM', TOOLKIT_DIR . '/img2dcm');
 }
@@ -197,6 +197,8 @@ class dicom_convert {
   var $tn_file = '';
   var $jpg_quality = 100;
   var $tn_size = 125;
+  var $template = '';
+  var $temp_dir = '';
 
   function __construct($file = '') {
     $this->file = $file;
@@ -267,7 +269,7 @@ class dicom_convert {
       $new_file = $this->file;
     }
 
-    $uncompress_cmd = BIN_DCMCJPEG . " \"" . $this->file . "\" \"" . $new_file . "\"";
+    $compress_cmd = BIN_DCMCJPEG . " \"" . $this->file . "\" \"" . $new_file . "\"";
     $out = Execute($compress_cmd);
     return($new_file);
   }
