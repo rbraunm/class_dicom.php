@@ -94,6 +94,10 @@ $c->compress('/path/to/compressed.dcm');
 
 ### Converting JPEG to DICOM
 
+> **Known issue:** `jpg_to_dcm()` treats any output from `xml2dcm` as a fatal error. The bundled XML template (`examples/jpg_to_dcm.xml`) produces a SOPInstanceUID mismatch warning on current DCMTK versions, which causes the function to return early without embedding pixel data. The resulting file is a valid DICOM header but contains no image. This will be fixed in v2.0.0.
+
+The intended usage (once fixed) follows the pattern in `examples/jpg_to_dcm.php`:
+
 ```php
 $c = new dicom_convert;
 $c->jpg_file  = '/path/to/photo.jpg';
@@ -101,14 +105,29 @@ $c->template  = '/path/to/jpg_to_dcm.xml';  // see examples/jpg_to_dcm.xml
 $c->temp_dir  = '/tmp/dcm_temp';
 
 $dcm_path = $c->jpg_to_dcm([
+    '0008,0012' => date('Ymd'),
+    '0008,0013' => date('Gis'),
+    '0008,0050' => 'ACCESSION123',
+    '0008,0080' => 'General Hospital',
+    '0008,0090' => 'Dr. Smith',
+    '0008,1030' => 'Study Description',
+    '0008,103e' => 'Series Description',
     '0010,0010' => 'DOE^JOHN',
     '0010,0020' => 'PATIENT001',
-    '0008,0060' => 'OT',
-    '0008,0080' => 'General Hospital',
+    '0010,0030' => '19700101',
+    '0010,0040' => 'M',
+    '0010,21b0' => 'Patient History',
+    '0010,4000' => 'Patient Comments',
+    '0018,0015' => 'Head',
+    '0020,000d' => '1.3.51.0.7.2822962297.26312.19209.44846.7354.10266.42',
+    '0020,000e' => '1.3.51.5156.4083.' . date('Ymd') . '.42',
+    '0020,0011' => '1',
+    '0020,0012' => '1',
+    '0020,0013' => '1',
 ]);
 ```
 
-A sample XML template and a more complete tag mapping are in the `examples/` directory.
+The tag keys must match the `(group,element)` placeholders in the XML template. See `examples/jpg_to_dcm.php` for the full tag mapping.
 
 ### Multiframe DICOM to video
 

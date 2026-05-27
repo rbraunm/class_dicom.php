@@ -10,6 +10,10 @@ PHP 8.x compatibility fixes and an integration test suite.
 - Added `php >= 8.0` requirement to `composer.json`
 - Added integration test suite with pydicom/pynetdicom cross-validation covering tags, conversions, compression, and DICOM networking
 
+### Known issues
+
+- `jpg_to_dcm()` returns early when `xml2dcm` produces any output, including non-fatal warnings. The bundled XML template triggers a SOPInstanceUID mismatch warning on current DCMTK versions, preventing the `img2dcm` step from embedding pixel data. The output file contains only a DICOM header with no image.
+
 ## v2.0.0 — modern PHP refactor
 
 A ground-up refactor of the library internals while preserving the simple API surface. The goal is a library that's installable via Composer with no manual configuration, uses modern PHP conventions, and fails loudly when something goes wrong.
