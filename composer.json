@@ -1,11 +1,12 @@
 {
     "name": "rbraunm/class_dicom",
-    "description": "PHP DICOM minimal file handler",
+    "description": "PHP library for DICOM tag handling, image conversion, compression, and networking via DCMTK",
     "type": "library",
     "require": {
         "php": ">=8.0"
     },
     "license": "MIT",
+    "keywords": ["dicom", "dcmtk", "pacs", "medical-imaging", "dicom-networking"],
     "authors": [
 		{
             "name": "Randy Braunm",
