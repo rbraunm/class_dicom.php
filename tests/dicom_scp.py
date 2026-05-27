@@ -10,7 +10,7 @@ Usage:
 """
 import sys, os, signal, threading
 from pathlib import Path
-from pynetdicom import AE, evt, StoragePresentationContexts
+from pynetdicom import AE, evt, StoragePresentationContexts, VerificationPresentationContexts
 
 DEFAULT_PORT = 11112
 DEFAULT_DIR = "./received"
@@ -29,8 +29,11 @@ def handle_store(event, output_dir):
     return 0x0000  # Success
 
 
-def handle_echo(event):
-    """Handle a C-ECHO request."""
+def handle_echo(event, output_dir):
+    """Handle a C-ECHO request. Write a marker so tests can confirm it happened."""
+    marker = Path(output_dir) / ".echo_received"
+    count = int(marker.read_text()) + 1 if marker.exists() else 1
+    marker.write_text(str(count))
     return 0x0000
 
 
@@ -38,11 +41,11 @@ def run(port=DEFAULT_PORT, output_dir=DEFAULT_DIR):
     Path(output_dir).mkdir(parents=True, exist_ok=True)
 
     ae = AE(ae_title="TEST_SCP")
-    ae.supported_contexts = StoragePresentationContexts
+    ae.supported_contexts = StoragePresentationContexts + VerificationPresentationContexts
 
     handlers = [
         (evt.EVT_C_STORE, handle_store, [output_dir]),
-        (evt.EVT_C_ECHO, handle_echo),
+        (evt.EVT_C_ECHO, handle_echo, [output_dir]),
     ]
 
     server = ae.start_server(("127.0.0.1", port), evt_handlers=handlers, block=False)
