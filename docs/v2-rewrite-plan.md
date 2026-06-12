@@ -15,7 +15,7 @@ The clean fix is to **stop deriving**. A ground-up reimplementation, written wit
 
 Functionality is not the issue: DICOM operations, the use of DCMTK command-line tools, and a class's public capabilities are facts and ideas, not protected expression. We are free to build a library that *does the same things*. What we must not reuse is the original's **expression** — its specific code, structure, and comments.
 
-> A courtesy email to Dean Vaughan asking him to license the original under a permissive license remains worthwhile as a one-shot attempt (use the deanvaughan.org contact, not GitHub — a prior PR went unanswered). It is **not on the critical path**: the rewrite proceeds regardless, and its validity does not depend on a reply.
+> **Contacting Dean Vaughan is a dead path — do not pursue it.** A prior PR to his repo went unanswered, and his GitHub profile is years dormant. That experiment has already been run. The rewrite does not depend on his cooperation and does not need it: clean-room reimplementation establishes our own clean Apache-2.0 footing outright.
 
 ---
 
