@@ -1,5 +1,11 @@
 # Roadmap
 
+## Priority #1 — Clean-room rewrite & Apache-2.0 relicensing
+
+This package is a fork of Dean Vaughan's originally-unlicensed `class_dicom.php`, so the current `MIT` declaration asserts terms we can't grant and any refactor of the existing file inherits the same defect. The top priority is therefore a **from-scratch, clean-room reimplementation** — sole-authored, written without reference to the legacy source — released under **Apache-2.0**. This supersedes the "refactor preserving the API surface" framing previously attached to v2.0.0 below.
+
+Full plan, clean-room discipline, licensing artifacts, and phased delivery: **[docs/v2-rewrite-plan.md](docs/v2-rewrite-plan.md)**.
+
 ## v1.1.0 (current)
 
 PHP 8.x compatibility fixes and an integration test suite.
@@ -14,9 +20,9 @@ PHP 8.x compatibility fixes and an integration test suite.
 
 - `jpg_to_dcm()` returns early when `xml2dcm` produces any output, including non-fatal warnings. The bundled XML template triggers a SOPInstanceUID mismatch warning on current DCMTK versions, preventing the `img2dcm` step from embedding pixel data. The output file contains only a DICOM header with no image.
 
-## v2.0.0 — modern PHP refactor
+## v2.0.0 — clean-room rewrite (Apache-2.0)
 
-A ground-up refactor of the library internals while preserving the simple API surface. The goal is a library that's installable via Composer with no manual configuration, uses modern PHP conventions, and fails loudly when something goes wrong.
+A ground-up reimplementation written without reference to the legacy source (see [docs/v2-rewrite-plan.md](docs/v2-rewrite-plan.md) for the clean-room discipline and the licensing/provenance rationale). The result is sole-authored, Apache-2.0-licensed, installable via Composer with no manual configuration, modern in its conventions, and loud when something goes wrong. The design targets below describe the shape of the **new** code, not edits to the existing file.
 
 ### Language and structure
 
