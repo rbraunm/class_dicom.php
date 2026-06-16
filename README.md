@@ -243,3 +243,7 @@ The `examples/` directory contains working scripts for common operations:
 ## License
 
 MIT
+
+---
+
+Part of the [OneSourceIT open-source projects](https://onesourceit.us/open-source.html).
