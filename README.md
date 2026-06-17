@@ -246,7 +246,7 @@ This library wraps [DCMTK](https://dicom.offis.de/dcmtk.php.en), the DICOM Toolk
 
 ## License
 
-MIT
+Apache-2.0. See [LICENSE](LICENSE) and [NOTICE](NOTICE).
 
 ---
 

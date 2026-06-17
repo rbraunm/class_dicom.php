@@ -1,0 +1,35 @@
+name: CI
+
+on:
+  push:
+    branches: [claude, main]
+  pull_request:
+    branches: [claude, main]
+
+jobs:
+  validate:
+    name: Validate and lint (PHP 8.5)
+    runs-on: ubuntu-latest
+    container:
+      image: php:8.5-cli
+    steps:
+      - name: Install git
+        run: apt-get update && apt-get install -y --no-install-recommends git
+
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Composer
+        run: |
+          php -r "copy('https://getcomposer.org/installer', 'composer-setup.php');"
+          php composer-setup.php --install-dir=/usr/local/bin --filename=composer
+          php -r "unlink('composer-setup.php');"
+
+      - name: Validate composer.json
+        run: composer validate --strict
+
+      - name: Install dependencies
+        run: composer install --no-interaction --no-progress
+
+      - name: Lint PHP sources
+        run: find src -name '*.php' -print0 | xargs -0 -r -n1 php -l
