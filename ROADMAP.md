@@ -50,6 +50,8 @@ These are targeted additions where PHP users currently have to shell out to DCMT
 
 ### Native DICOM parsing (reduce DCMTK dependency)
 
+DCMTK is developed and maintained by [OFFIS e.V.](https://www.offis.de/en/), a non-profit research institute in Oldenburg, Germany, and is distributed under a 3-clause BSD license. It is actively maintained on a roughly annual release cadence (3.7.0 in January 2026) with development continuing between releases — a healthy dependency, not an abandoned one. The motivation for reducing and eventually replacing it is **dependency footprint, not licensing**: every downstream consumer of this library implicitly takes on DCMTK as an external runtime dependency they must install and keep patched. Because it parses untrusted DICOM input, DCMTK receives security fixes over time (e.g. CVE-2025-14607, a memory-corruption bug in `dcmdata`), so depending on this library means accepting that patch-tracking responsibility. Eliminating the external toolchain entirely — the read path first, then conversion and networking — is the long-term aim the items below build toward.
+
 - **Tag reading without dcmdump.** Parse the DICOM binary format directly in PHP for tag extraction. This removes the most common reason to shell out and makes the library usable on hosts without DCMTK installed (read-only use case).
 - **Tag writing without dcmodify.** Binary-level tag insertion and modification for the common VR types (LO, PN, DA, TM, UI, SH, CS). Complex VRs (SQ, OW, OF) can remain DCMTK-dependent initially.
 - **Transfer syntax detection.** Read the transfer syntax UID from file meta without a full tag parse, so `is_dcm()` can work without DCMTK.
