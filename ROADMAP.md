@@ -42,7 +42,7 @@ Because this package has external Packagist consumers, v2 ships a backward-compa
 
 ### Testing
 
-- **CI pipeline.** GitHub Actions workflow running the existing pydicom/pynetdicom test suite on push. PHP 8.4 and 8.5 matrix against the current DCMTK package (the actively-supported branches; 8.4 is the production target, 8.5 the latest).
+- **CI pipeline.** GitHub Actions workflow running the existing pydicom/pynetdicom test suite on push. PHP 8.5 against the current DCMTK package (the baseline and latest stable; add 8.6 to the matrix when it releases).
 - **Error path coverage.** Tests for missing files, invalid DICOM, unreachable hosts, and malformed tags.
 - **Fixture expansion.** Test against multiple transfer syntaxes (Implicit VR, Explicit VR, JPEG Baseline, JPEG Lossless, JPEG 2000) and modalities (CR, CT, MR, US, multi-frame).
 

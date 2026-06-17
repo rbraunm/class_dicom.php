@@ -58,7 +58,7 @@ Modern PHP, no manual configuration, loud failure. The design goals already capt
   - `DCMTK\` -- the toolkit substrate both depend on: `DCMTK\Toolkit` (discovery, version check, validated exec). Modelling DCMTK as its own layer keeps DICOM and PACS independent of each other and gives the future native-implementation work (`ROADMAP.md` v2.x) a single seam to replace.
 
   Exact class boundaries settle during design.
-- **Typed throughout.** Typed, visibility-scoped properties; parameter and return types on all public methods; PHP 8.4+ baseline (the current actively-supported floor -- 8.1 and earlier are end-of-life).
+- **Typed throughout.** Typed, visibility-scoped properties; parameter and return types on all public methods; PHP 8.5+ baseline (the latest stable branch and the recommended floor for new code; 8.4 and earlier are not targeted).
 - **Exceptions, never silent returns.** A shared exception hierarchy -- a marker interface (so callers can catch broadly) with typed `DICOM\Exception\*` and `PACS\Exception\*` concretes. Every failure path throws something descriptive. This is the single biggest correctness improvement over v1, and it matches the project's fail-loud principle: a crash during development is a gift; a silent wrong answer in production is a disaster.
 - **Injected toolkit configuration.** No top-level `define()`. DCMTK location is discovered or injected via the `DCMTK\Toolkit` object/constructor. The library is usable without editing any source file.
 - **No free-standing global functions.** Execution and detection helpers live in classes; the exec helper validates that a binary exists before invoking it and throws if not.
@@ -118,7 +118,7 @@ Per the project's testing standards -- tests verify real behavior, never monkeyp
 - **Real DCMTK, real DICOM.** No mocking of the toolkit boundary's *logic*; tests run against an actual DCMTK install and real sample files. Test doubles are acceptable only for genuinely external boundaries (e.g. an unreachable network host), not for the behavior under test.
 - **Error paths are first-class.** Missing files, invalid DICOM, unreachable hosts, malformed tags, missing binaries -- each asserts the specific exception, not just "it didn't crash."
 - **Fixture breadth.** Multiple transfer syntaxes (Implicit VR, Explicit VR, JPEG Baseline, JPEG Lossless) and modalities (CR, CT, MR, US, multi-frame).
-- **CI matrix.** GitHub Actions across PHP 8.4 and 8.5 (the actively-supported branches) against the current DCMTK package, on every push.
+- **CI matrix.** GitHub Actions on PHP 8.5 against the current DCMTK package, on every push; add 8.6 to the matrix when it releases (~Nov 2026).
 
 ---
 
