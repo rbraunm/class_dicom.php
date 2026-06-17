@@ -24,9 +24,11 @@ PHP 8.x compatibility fixes and an integration test suite.
 
 A ground-up reimplementation written without reference to the legacy source (see [docs/v2-rewrite-plan.md](docs/v2-rewrite-plan.md) for the clean-room discipline and the licensing/provenance rationale). The result is sole-authored, Apache-2.0-licensed, installable via Composer with no manual configuration, modern in its conventions, and loud when something goes wrong. The design targets below describe the shape of the **new** code, not edits to the existing file.
 
+Because this package has external Packagist consumers, v2 ships a backward-compatibility shim that preserves the v1 public surface with deprecation warnings, delegating into the new classes; the shim replaces the legacy file rather than shipping it (see [docs/v2-rewrite-plan.md](docs/v2-rewrite-plan.md) §7).
+
 ### Language and structure
 
-- **Namespaces and PSR-4 autoloading.** Move classes under a `Dicom\` namespace with a `src/` directory layout that Composer can autoload without a classmap.
+- **Namespaces and PSR-4 autoloading.** Move classes under peer `DICOM\` and `PACS\` namespaces (with a shared `DCMTK\` toolkit layer), `src/` layout, Composer-autoloadable without a classmap. PACS networking is split out as a peer rather than conflated into the DICOM class as in v1; casing follows the project's acronym convention. See [docs/v2-rewrite-plan.md](docs/v2-rewrite-plan.md) §4.
 - **Typed properties and return types.** Replace `var` declarations with typed, visibility-scoped properties. Add parameter and return type declarations to all public methods.
 - **Exception-based error handling.** Every method that currently returns `0` or an empty string on failure should throw a descriptive exception. Silent failures are the primary source of bugs in the current codebase.
 - **Configurable toolkit path.** Replace the top-level `define('TOOLKIT_DIR', ...)` with constructor injection or a configuration object. The library should be usable without editing source files.
