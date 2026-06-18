@@ -32,4 +32,4 @@ jobs:
         run: composer install --no-interaction --no-progress
 
       - name: Lint PHP sources
-        run: find src -name '*.php' -print0 | xargs -0 -r -n1 php -l
+        run: find src tests -name '*.php' -print0 | xargs -0 -r -n1 php -l
