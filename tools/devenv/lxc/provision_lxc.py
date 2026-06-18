@@ -10,6 +10,11 @@ shelling out to ssh(1): the node password is prompted once via getpass and held 
 for the handshake -- it never reaches a command line, file, or log. One authenticated
 connection is opened and reused for every command.
 
+Host-key trust is deliberately permissive: an unknown node key is auto-accepted (and cached in
+the local known_hosts) rather than rejected. This is a trusted-LAN provisioning tool, so the
+convenience is worth the narrow first-connect MITM window; on a hostile network, pre-seed the
+node's key in known_hosts before running.
+
 It creates an unprivileged Debian LXC, clones the repo, runs the shared toolchain installer
 (tools/devenv/provision.sh: PHP 8.5, Debian's DCMTK, a python venv with pydicom/pynetdicom, and
 Composer), runs composer install, and enables key-based SSH for a dedicated login. The toolchain
@@ -28,13 +33,17 @@ from __future__ import annotations
 import argparse
 import getpass
 import os
+import re
 import shlex
-import subprocess
 import sys
 from collections import namedtuple
 
 try:
     import paramiko
+    # cryptography is paramiko's own dependency, so it's present whenever paramiko imported;
+    # it generates the ed25519 access key in pure Python (no ssh-keygen on PATH).
+    from cryptography.hazmat.primitives import serialization
+    from cryptography.hazmat.primitives.asymmetric import ed25519
 except ImportError:
     sys.exit(
         "provision_lxc needs paramiko (the pure-Python SSH client).\n"
@@ -48,6 +57,11 @@ BASE = "/opt/class_dicom"   # in-container install root
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 KEY_DIR = os.path.join(SCRIPT_DIR, "keys")
+
+# A single DNS label: what avahi can advertise as <name>.local, and all the mDNS step's
+# sed/grep can treat as a literal. Reject anything else up front instead of letting a stray
+# '/' or '.' break the sed or fool the grep -x verify.
+HOSTNAME_LABEL = re.compile(r"^[A-Za-z0-9]([A-Za-z0-9-]{0,61}[A-Za-z0-9])?$")
 
 SSH_TARGET = ""    # the user@host spec, kept for display in messages
 _CLIENT = None     # the single authenticated paramiko connection, opened in connect()
@@ -69,6 +83,7 @@ def connect(host_spec: str) -> "paramiko.SSHClient":
     password = getpass.getpass(f"Password for {host_spec}: ")
     client = paramiko.SSHClient()
     client.load_system_host_keys()
+    # Trusted-LAN tool: auto-accept an unknown node key rather than reject it (see module docstring).
     client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
     try:
         client.connect(host, port=port, username=user, password=password,
@@ -205,14 +220,29 @@ def verify_install(ctid: int) -> None:
 
 def ensure_local_key(args) -> str:
     """Generate the ed25519 access keypair locally into KEY_DIR (git-ignored) if absent; return
-    the private-key path. Only the public half is ever sent to the container."""
+    the private-key path. Pure-Python via cryptography (paramiko's own dependency) -- no ssh-keygen
+    on PATH -- so the keygen matches the connection: both are paramiko's stack, not ssh(1)'s. Only
+    the public half is ever sent to the container."""
     os.makedirs(KEY_DIR, exist_ok=True)
     key = os.path.join(KEY_DIR, f"{args.name}_ed25519")
     if not os.path.exists(key):
-        subprocess.run(
-            ["ssh-keygen", "-t", "ed25519", "-N", "", "-C", f"class-dicom@{args.name}", "-f", key],
-            check=True,
+        private = ed25519.Ed25519PrivateKey.generate()
+        priv_pem = private.private_bytes(
+            encoding=serialization.Encoding.PEM,
+            format=serialization.PrivateFormat.OpenSSH,
+            encryption_algorithm=serialization.NoEncryption(),
         )
+        pub_line = private.public_key().public_bytes(
+            encoding=serialization.Encoding.OpenSSH,
+            format=serialization.PublicFormat.OpenSSH,
+        ) + f" class-dicom@{args.name}\n".encode()
+        # Create the private key 0600 from the start (O_CREAT mode) so the secret is never briefly
+        # world-readable -- the window ssh-keygen also closes.
+        fd = os.open(key, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+        with os.fdopen(fd, "wb") as f:
+            f.write(priv_pem)
+        with open(key + ".pub", "wb") as f:
+            f.write(pub_line)
     return key
 
 
@@ -323,6 +353,11 @@ def main() -> None:
         setup_ssh(args.ctid, args, key)
         mdns_name = args.mdns_hostname or args.name
         if not args.no_mdns:
+            if not HOSTNAME_LABEL.match(mdns_name):
+                sys.exit(
+                    f"mDNS hostname {mdns_name!r} is not a valid DNS label (letters, digits, and "
+                    f"hyphens; <=63 chars). Fix --name/--mdns-hostname, or pass --no-mdns."
+                )
             setup_mdns(args.ctid, mdns_name)
         ip = container_ip(args.ctid)
         report(args, ip, key, mdns_name if not args.no_mdns else "")
