@@ -1,0 +1,334 @@
+#!/usr/bin/env python3
+# SPDX-License-Identifier: Apache-2.0
+# Copyright (c) 2026 Randy Braunm
+
+"""Provision a Proxmox LXC with the class_dicom.php dev/test/CI toolchain.
+
+Run this from anywhere; it drives a Proxmox node over SSH (--host root@<node>, required) and
+never runs against a local node. SSH is spoken by a pure-Python client (paramiko), not by
+shelling out to ssh(1): the node password is prompted once via getpass and held only in memory
+for the handshake -- it never reaches a command line, file, or log. One authenticated
+connection is opened and reused for every command.
+
+It creates an unprivileged Debian LXC, clones the repo, runs the shared toolchain installer
+(tools/devenv/provision.sh: PHP 8.5, Debian's DCMTK, a python venv with pydicom/pynetdicom, and
+Composer), runs composer install, and enables key-based SSH for a dedicated login. The toolchain
+lives in provision.sh so the same definition backs this LXC and the CI image.
+
+An ed25519 keypair is generated locally into ./keys (git-ignored) and only the public half is
+installed into the container. The toolchain installer is run from the clone, so the container is
+also a checkout you can run the test suite and the call-map harness in.
+
+    python tools/devenv/lxc/provision_lxc.py --host root@labradorite --name <gemstone>
+
+Re-running on an existing CTID refuses unless --recreate is given (no silent clobber).
+"""
+from __future__ import annotations
+
+import argparse
+import getpass
+import os
+import shlex
+import subprocess
+import sys
+from collections import namedtuple
+
+try:
+    import paramiko
+except ImportError:
+    sys.exit(
+        "provision_lxc needs paramiko (the pure-Python SSH client).\n"
+        "Install it from an admin prompt: pip install paramiko"
+    )
+
+DEFAULT_REPO = "https://github.com/rbraunm/class_dicom.php.git"
+DEFAULT_BRANCH = "main"   # public default; pass --branch claude for unmerged dev work
+DEFAULT_TEMPLATE = "debian-13-standard_13.0-1_amd64.tar.zst"
+BASE = "/opt/class_dicom"   # in-container install root
+
+SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+KEY_DIR = os.path.join(SCRIPT_DIR, "keys")
+
+SSH_TARGET = ""    # the user@host spec, kept for display in messages
+_CLIENT = None     # the single authenticated paramiko connection, opened in connect()
+
+Result = namedtuple("Result", "returncode stdout stderr")
+
+
+def connect(host_spec: str) -> "paramiko.SSHClient":
+    """Open the one SSH connection every command reuses. Password is prompted here and held
+    only in memory for the handshake -- never echoed, written, or logged."""
+    user, sep, hostpart = host_spec.partition("@")
+    if not sep or not hostpart:
+        sys.exit(f"--host must be user@host (e.g. root@labradorite), got {host_spec!r}.")
+    host, _, port_s = hostpart.partition(":")
+    try:
+        port = int(port_s) if port_s else 22
+    except ValueError:
+        sys.exit(f"bad port in --host {host_spec!r}.")
+    password = getpass.getpass(f"Password for {host_spec}: ")
+    client = paramiko.SSHClient()
+    client.load_system_host_keys()
+    client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+    try:
+        client.connect(host, port=port, username=user, password=password,
+                       look_for_keys=False, allow_agent=False)
+    except paramiko.AuthenticationException:
+        sys.exit(f"authentication failed for {host_spec} (wrong password?).")
+    except (paramiko.SSHException, OSError) as e:
+        sys.exit(f"cannot reach {host_spec} over SSH: {e}")
+    finally:
+        del password
+    return client
+
+
+def run(cmd: str) -> None:
+    """Run a Proxmox-host command over the shared connection, streaming output live; exit on
+    nonzero status (no silent fallbacks)."""
+    print(f"$ {cmd}")
+    chan = _CLIENT.get_transport().open_session()
+    chan.set_combine_stderr(True)
+    chan.exec_command(cmd)
+    stdout = chan.makefile("r")
+    for line in iter(stdout.readline, ""):
+        sys.stdout.write(line)
+        sys.stdout.flush()
+    rc = chan.recv_exit_status()
+    if rc != 0:
+        sys.exit(f"command failed (exit {rc}) on {SSH_TARGET}: {cmd}")
+
+
+def capture(cmd: str) -> Result:
+    """Run a command over the shared connection and return its full output, no echo."""
+    chan = _CLIENT.get_transport().open_session()
+    chan.exec_command(cmd)
+    out = chan.makefile("rb").read().decode(errors="replace")
+    err = chan.makefile_stderr("rb").read().decode(errors="replace")
+    rc = chan.recv_exit_status()
+    return Result(rc, out, err)
+
+
+def container_exists(ctid: int) -> bool:
+    return capture(f"pct status {ctid}").returncode == 0
+
+
+def exec_in(ctid: int, script: str) -> None:
+    """Run a bash script inside the container, fail-loud (set -euo pipefail)."""
+    body = "set -euo pipefail\n" + script
+    run(f"pct exec {ctid} -- bash -lc {shlex.quote(body)}")
+
+
+def preflight() -> None:
+    # connect() already proved we can authenticate; confirm we landed as root on a Proxmox node.
+    if capture("id -u").stdout.strip() != "0":
+        sys.exit(f"remote user on {SSH_TARGET} is not root (pct/pveam need root).")
+    if capture("command -v pct pveam").returncode != 0:
+        sys.exit(f"{SSH_TARGET} is missing pct/pveam -- is it a Proxmox node?")
+
+
+def ensure_template(template: str, template_storage: str) -> None:
+    print(f"[1/7] Ensuring template {template} is cached on {template_storage}...")
+    if template in capture(f"pveam list {template_storage}").stdout:
+        print("  already cached.")
+        return
+    run("pveam update")
+    run(f"pveam download {template_storage} {template}")
+
+
+def create_container(args) -> None:
+    print(f"[2/7] Creating LXC {args.ctid} ({args.name})...")
+    if container_exists(args.ctid):
+        if not args.recreate:
+            sys.exit(
+                f"Container {args.ctid} already exists. Pass --recreate to destroy and rebuild "
+                f"it, or choose another --ctid."
+            )
+        print(f"  --recreate: stopping and destroying existing {args.ctid}...")
+        if "status: running" in capture(f"pct status {args.ctid}").stdout:
+            run(f"pct stop {args.ctid}")
+        run(f"pct destroy {args.ctid}")
+
+    if args.ip != "dhcp" and not args.gateway:
+        sys.exit("A static --ip needs --gateway (the container would have no default route).")
+    rootfs = f"{args.rootfs_storage}:{args.rootfs_size}"
+    net = f"name=eth0,bridge={args.bridge},ip={args.ip}"
+    if args.ip != "dhcp":
+        net += f",gw={args.gateway}"
+    if args.vlan:
+        net += f",tag={args.vlan}"
+    dns = ""
+    if args.nameserver:
+        dns += f" --nameserver {shlex.quote(args.nameserver)}"
+    if args.searchdomain:
+        dns += f" --searchdomain {shlex.quote(args.searchdomain)}"
+    run(
+        f"pct create {args.ctid} {args.template_storage}:vztmpl/{args.template} "
+        f"--hostname {shlex.quote(args.name)} "
+        f"--cores {args.cores} --memory {args.memory} --swap {args.swap} "
+        f"--rootfs {rootfs} --net0 {shlex.quote(net)}{dns} "
+        f"--unprivileged 1 --onboot 0 --tags {shlex.quote(args.tags)} --start 1"
+    )
+
+
+def wait_for_network(ctid: int) -> None:
+    print("[3/7] Waiting for container network...")
+    exec_in(ctid, 'for i in $(seq 1 30); do '
+                  'getent hosts github.com >/dev/null 2>&1 && exit 0; sleep 2; done; '
+                  'echo "no network in container after 60s" >&2; exit 1')
+
+
+def install_toolchain(ctid: int, args) -> None:
+    print(f"[4/7] Cloning {args.repo} ({args.branch}) and running the toolchain installer...")
+    exec_in(ctid,
+            "export DEBIAN_FRONTEND=noninteractive LANG=C.UTF-8\n"
+            "apt-get update -qq\n"
+            "apt-get install -y -qq git ca-certificates\n"
+            f"rm -rf {BASE}\n"
+            f"git clone --depth 1 --branch {shlex.quote(args.branch)} "
+            f"{shlex.quote(args.repo)} {BASE}/src\n"
+            f"bash {BASE}/src/tools/devenv/provision.sh\n"
+            "export COMPOSER_ALLOW_SUPERUSER=1\n"
+            f"cd {BASE}/src && composer install --no-interaction --no-progress")
+    verify_install(ctid)
+
+
+def verify_install(ctid: int) -> None:
+    """Assert step 4's postcondition rather than trusting the install's exit alone: the toolchain
+    is present and composer produced a runnable PHPUnit."""
+    print("  verifying the install (toolchain present + composer deps installed)...")
+    exec_in(ctid,
+            "command -v dcmdump composer >/dev/null\n"
+            f"test -d {BASE}/src/vendor\n"
+            f"{BASE}/src/vendor/bin/phpunit --version\n"
+            "echo 'install verified: dcmtk, composer, and phpunit are present'")
+
+
+def ensure_local_key(args) -> str:
+    """Generate the ed25519 access keypair locally into KEY_DIR (git-ignored) if absent; return
+    the private-key path. Only the public half is ever sent to the container."""
+    os.makedirs(KEY_DIR, exist_ok=True)
+    key = os.path.join(KEY_DIR, f"{args.name}_ed25519")
+    if not os.path.exists(key):
+        subprocess.run(
+            ["ssh-keygen", "-t", "ed25519", "-N", "", "-C", f"class-dicom@{args.name}", "-f", key],
+            check=True,
+        )
+    return key
+
+
+def setup_ssh(ctid: int, args, key: str) -> None:
+    print(f"[5/7] Enabling sshd and the key-based {args.ssh_user!r} login...")
+    user = shlex.quote(args.ssh_user)
+    home = f"/home/{args.ssh_user}"
+    with open(key + ".pub") as f:
+        pub = f.read().strip()
+    exec_in(ctid,
+            "export DEBIAN_FRONTEND=noninteractive LANG=C.UTF-8\n"
+            "apt-get install -y -qq openssh-server\n"
+            f"id -u {user} >/dev/null 2>&1 || useradd --create-home --shell /bin/bash {user}\n"
+            f"chown -R {user}:{user} {BASE}\n"   # the login owns its tools: run, pull, write caches
+            f"install -d -m 0700 -o {user} -g {user} {home}/.ssh\n"
+            f"printf '%s\\n' {shlex.quote(pub)} > {home}/.ssh/authorized_keys\n"
+            f"chown {user}:{user} {home}/.ssh/authorized_keys\n"
+            f"chmod 600 {home}/.ssh/authorized_keys\n"
+            "install -d -m 0755 /etc/ssh/sshd_config.d\n"
+            "printf 'PubkeyAuthentication yes\\nPasswordAuthentication no\\n'"
+            " > /etc/ssh/sshd_config.d/10-class-dicom.conf\n"
+            "systemctl enable --now ssh\n"
+            "systemctl restart ssh\n"
+            # assert the postcondition: the unit is active and key auth is effective
+            "systemctl is-active --quiet ssh\n"
+            "sshd -T 2>/dev/null | grep -i '^pubkeyauthentication yes'\n"
+            "echo 'verified: sshd is active with key auth effective'\n")
+
+
+def setup_mdns(ctid: int, mdns_name: str) -> None:
+    print(f"[6/7] Advertising {mdns_name}.local over mDNS (Avahi)...")
+    exec_in(ctid,
+            "export DEBIAN_FRONTEND=noninteractive LANG=C.UTF-8\n"
+            "apt-get install -y -qq avahi-daemon libnss-mdns\n"
+            f"sed -ri 's/^#?host-name=.*/host-name={mdns_name}/' /etc/avahi/avahi-daemon.conf\n"
+            "systemctl enable --now avahi-daemon\n"
+            "systemctl restart avahi-daemon\n"
+            "systemctl is-active --quiet avahi-daemon\n"
+            f"grep -x 'host-name={mdns_name}' /etc/avahi/avahi-daemon.conf\n"
+            "echo 'verified: avahi-daemon is active and advertising the host-name above'\n")
+
+
+def container_ip(ctid: int) -> str:
+    parts = capture(f"pct exec {ctid} -- hostname -I").stdout.strip().split()
+    return parts[0] if parts else ""
+
+
+def report(args, ip: str, key: str, mdns_name: str) -> None:
+    target = ip or (f"{mdns_name}.local" if mdns_name else "<container-ip>")
+    print("\n[7/7] Done.")
+    print(f"  CT {args.ctid} ({args.name}) is up{(' at ' + ip) if ip else ''} on {SSH_TARGET}.")
+    print(f"  Repo at {BASE}/src; toolchain installed via tools/devenv/provision.sh.")
+    print(f"  Key-based login '{args.ssh_user}' enabled; private key (git-ignored):")
+    print(f"    {key}")
+    if mdns_name:
+        print(f"  Advertised over mDNS as {mdns_name}.local (link-local; needs an mDNS reflector to cross VLANs).")
+    print(f"\n  Connect:  ssh -i {key} {args.ssh_user}@{target}")
+    print(f"  Run the suite:  cd {BASE}/src && vendor/bin/phpunit")
+    print(f"  Update later:   git -C {BASE}/src pull")
+
+
+def main() -> None:
+    parser = argparse.ArgumentParser(
+        description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
+    )
+    parser.add_argument("--host", required=True,
+                        help="Proxmox node to drive over SSH (e.g. root@labradorite)")
+    parser.add_argument("--name", required=True, help="container hostname (e.g. a gemstone)")
+    parser.add_argument("--ctid", type=int, default=210, help="container ID (default 210)")
+    parser.add_argument("--rootfs-storage", default="local-lvm",
+                        help="storage pool for the container rootfs (default local-lvm)")
+    parser.add_argument("--rootfs-size", type=int, default=16, help="rootfs size in GiB (default 16)")
+    parser.add_argument("--cores", type=int, default=2, help="vCPUs (default 2)")
+    parser.add_argument("--memory", type=int, default=4096, help="RAM in MiB (default 4096)")
+    parser.add_argument("--swap", type=int, default=512, help="swap in MiB (default 512)")
+    parser.add_argument("--template-storage", default="local", help="template storage")
+    parser.add_argument("--template", default=DEFAULT_TEMPLATE)
+    parser.add_argument("--bridge", default="vmbr0", help="network bridge (default vmbr0)")
+    parser.add_argument("--ip", default="dhcp",
+                        help="container IPv4: 'dhcp' or CIDR like 10.0.0.5/24 (default dhcp)")
+    parser.add_argument("--gateway", default="", help="default gateway (required with a static --ip)")
+    parser.add_argument("--vlan", type=int, default=0, help="VLAN tag for the NIC (0 = untagged)")
+    parser.add_argument("--nameserver", default="", help="DNS server(s) (default: from DHCP)")
+    parser.add_argument("--searchdomain", default="", help="DNS search domain (default: from DHCP)")
+    parser.add_argument("--tags", default="class-dicom;devenv",
+                        help="Proxmox tags (semicolon-separated)")
+    parser.add_argument("--ssh-user", default="dicom",
+                        help="container login created with key-based sshd (default dicom)")
+    parser.add_argument("--mdns-hostname", default="",
+                        help="hostname advertised over mDNS as <name>.local (default: --name)")
+    parser.add_argument("--no-mdns", action="store_true", help="skip the mDNS step")
+    parser.add_argument("--recreate", action="store_true",
+                        help="destroy and rebuild if the CTID already exists")
+    parser.add_argument("--repo", default=DEFAULT_REPO, help="git URL to clone")
+    parser.add_argument("--branch", default=DEFAULT_BRANCH, help=f"repo branch (default {DEFAULT_BRANCH})")
+    args = parser.parse_args()
+
+    global SSH_TARGET, _CLIENT
+    SSH_TARGET = args.host
+    _CLIENT = connect(args.host)
+    try:
+        preflight()
+        ensure_template(args.template, args.template_storage)
+        create_container(args)
+        wait_for_network(args.ctid)
+        install_toolchain(args.ctid, args)
+        key = ensure_local_key(args)
+        setup_ssh(args.ctid, args, key)
+        mdns_name = args.mdns_hostname or args.name
+        if not args.no_mdns:
+            setup_mdns(args.ctid, mdns_name)
+        ip = container_ip(args.ctid)
+        report(args, ip, key, mdns_name if not args.no_mdns else "")
+    finally:
+        _CLIENT.close()
+
+
+if __name__ == "__main__":
+    main()

@@ -5,3 +5,15 @@ composer.lock
 # PHPUnit
 /.phpunit.cache/
 .phpunit.result.cache
+
+# Provisioner-generated access keys and secrets -- never commit
+/tools/**/keys/
+/tools/**/*.pem
+/tools/**/id_ed25519
+/tools/**/id_ed25519.pub
+/tools/**/id_rsa
+/tools/**/id_rsa.pub
+
+# Python bytecode
+__pycache__/
+*.pyc
