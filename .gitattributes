@@ -1,1 +1,14 @@
 tests/* linguist-vendored
+
+# Keep the development surface out of the distributed package.
+# Affects `git archive` (the tarball Packagist serves as the "dist"),
+# not the git repository itself.
+/.github         export-ignore
+/.gitattributes  export-ignore
+/.gitignore      export-ignore
+/docs            export-ignore
+/tools           export-ignore
+/tests           export-ignore
+/phpunit.xml     export-ignore
+/CONTRIBUTING.md export-ignore
+/ROADMAP.md      export-ignore
