@@ -1,7 +1,7 @@
 # v2.0.0 -- Clean-Room Rewrite & Apache-2.0 Relicensing
 
 **Status:** Planned · roadmap priority #1
-**Outcome:** a from-scratch reimplementation of this library, sole-authored, released under Apache-2.0.
+**Outcome:** a from-scratch reimplementation of this library, sole-authored, released under Apache-2.0, native-first (pure PHP wherever viable) with DCMTK used only for the operations where native is not.
 
 ---
 
@@ -51,33 +51,35 @@ The v1 line keeps its existing `composer.json` as-is on the default branch (see 
 
 Modern PHP, no manual configuration, loud failure. The design goals already captured in `ROADMAP.md` carry over -- restated here as the shape of the *new* code, not edits to the old:
 
+- **Native-first by design.** Every capability is implemented in pure PHP wherever that is viable; DCMTK is used only for the specific operations where native is not (realistically the compressed pixel codecs, and possibly DIMSE networking). This is a design-time decision per capability, not a runtime toggle: exactly one implementation per operation, no opt-in/opt-out, no fallback chain. Native operations carry no external dependency at all. The operations implemented via DCMTK require DCMTK at runtime and fail loud (a descriptive exception) if it is absent -- not because DCMTK is "optional," but because that is simply how those operations are built.
 - **PSR-4 autoloading** under peer top-level namespaces, `src/` layout, Composer-loadable with no classmap. Namespaces are uppercased per the project's acronym convention (an acronym keeps its casing as a single word): `DICOM\`, `PACS\`, `DCMTK\` -- not `Dicom\`.
-- **Decomposed into peers, not a god-class -- and PACS is split out from DICOM.** The v1 god-class conflated file/image operations with network operations. v2 separates them into sibling namespaces over a shared toolkit layer:
-  - `DICOM\` -- instance, tag, and image concerns: e.g. `DICOM\File` (a parsed instance), `DICOM\Tags` (read/write), `DICOM\Convert` (image conversion), `DICOM\Compress` (transfer-syntax conversion).
-  - `PACS\` -- DICOM networking as a first-class peer, not a sub-namespace of DICOM: `PACS\Scu` (C-STORE send), `PACS\Scp` (C-STORE receive + post-receive handler hook), `PACS\Echo` (C-ECHO).
-  - `DCMTK\` -- the toolkit substrate both depend on: `DCMTK\Toolkit` (discovery, version check, validated exec). Modelling DCMTK as its own layer keeps DICOM and PACS independent of each other and gives the future native-implementation work (`ROADMAP.md` v2.x) a single seam to replace.
+- **Decomposed into peers, not a god-class -- and PACS is split out from DICOM.** The v1 god-class conflated file/image operations with network operations. v2 separates them into sibling namespaces:
+  - `DICOM\` -- instance, tag, and image concerns, implemented natively: `DICOM\File` (parse + detection), `DICOM\Tags` (read/write), `DICOM\Convert` (image conversion), `DICOM\Compress` (transfer-syntax conversion). The native dataset reader/writer is the foundation these build on.
+  - `PACS\` -- DICOM networking as a first-class peer, not a sub-namespace of DICOM: `PACS\Scu` (C-STORE send), `PACS\Scp` (C-STORE receive + post-receive handler hook), `PACS\Echo` (C-ECHO). Native DIMSE vs DCMTK is decided when this phase is reached (see §5).
+  - `DCMTK\` -- not a substrate the others sit on, but the home for the operations we deliberately implement via DCMTK (the codec wall, at minimum). `DCMTK\Toolkit` handles binary discovery, version detection, and validated exec for those operations only, and is built when the first DCMTK-backed operation is, not before.
 
   Exact class boundaries settle during design.
 - **Typed throughout.** Typed, visibility-scoped properties; parameter and return types on all public methods; PHP 8.5+ baseline (the latest stable branch and the recommended floor for new code; 8.4 and earlier are not targeted).
-- **Exceptions, never silent returns.** A shared exception hierarchy -- a marker interface (so callers can catch broadly) with typed `DICOM\Exception\*` and `PACS\Exception\*` concretes. Every failure path throws something descriptive. This is the single biggest correctness improvement over v1, and it matches the project's fail-loud principle: a crash during development is a gift; a silent wrong answer in production is a disaster.
-- **Injected toolkit configuration.** No top-level `define()`. DCMTK location is discovered or injected via the `DCMTK\Toolkit` object/constructor. The library is usable without editing any source file.
-- **No free-standing global functions.** Execution and detection helpers live in classes; the exec helper validates that a binary exists before invoking it and throws if not.
+- **Exceptions, never silent returns.** A shared exception hierarchy: a marker interface (so callers can catch broadly) with typed `DICOM\Exception\*` and `PACS\Exception\*` concretes, plus a `DCMTK\Exception\*` family that includes the "this operation needs DCMTK and it was not found" case. Every failure path throws something descriptive. This matches the project's fail-loud principle: a crash during development is a gift; a silent wrong answer in production is a disaster.
+- **No global configuration, no `define()`.** Where DCMTK is used, its location is discovered at the point of use (constructor injection, env var, or PATH) by the operations that need it, never set as a global. For its native operations the library needs nothing installed beyond PHP.
+- **No free-standing global functions.** Execution and detection helpers live in classes; the DCMTK exec helper validates that a binary exists before invoking it and throws if not.
 
 ---
 
 ## 5. Capability scope (functional parity)
 
-These are behaviors to replicate -- facts about what a DICOM/DCMTK library does, free to implement independently. v2 ships when these work against a real DCMTK install with loud errors on every failure path.
+These are behaviors to replicate -- facts about what a DICOM/DCMTK library does, free to implement independently. v2 ships when they all work with loud errors on every failure path. The implementation choice (native vs DCMTK) is noted per capability and is settled as each phase is built, always preferring native.
 
-- **Tag read / write** -- extract tags into a structured form; modify/insert tags (common VRs first: LO, PN, DA, TM, UI, SH, CS).
-- **DICOM → JPEG** and **thumbnail generation**, with window/level control.
-- **JPEG → DICOM** -- fix the v1.1.0 known issue where a non-fatal `xml2dcm`/SOPInstanceUID warning aborts pixel-data embedding; the v2 path must not treat warnings as failure.
-- **Compress / uncompress** across transfer syntaxes (Implicit/Explicit VR, JPEG Baseline, JPEG Lossless; JPEG 2000 is v2.x).
-- **C-STORE SCU** (send) and **C-STORE SCP** (receive / store server), including the post-receive handler-script hook.
-- **C-ECHO** (verification).
-- **DCMTK ergonomics** -- binary discovery via `which` / env var / constructor, version detection at startup, single cross-platform path resolver. Resolves the long-standing hardcoded-`TOOLKIT_DIR`/symlink friction directly, rather than carrying it forward.
+- **Detection** (`is_dcm`, transfer syntax) -- native. Part 10 preamble / `DICM` magic and the group-0002 File Meta header.
+- **Tag read / write** -- native. Parse the dataset per transfer syntax (Implicit/Explicit VR, LE/BE) using the public data dictionary; modify/insert tags (common VRs first: LO, PN, DA, TM, UI, SH, CS).
+- **Transfer-syntax conversion** (Implicit <-> Explicit VR) -- native; the same dataset re-encoded.
+- **JPEG -> DICOM** -- native encapsulation of a JPEG bitstream into a DICOM instance. Native-first also dissolves the v1.1.0 `xml2dcm`/SOPInstanceUID warning bug, since there is no `xml2dcm` step.
+- **DICOM -> JPEG / thumbnails / window-level** -- native for uncompressed pixel data: the windowing math is native, with an imaging library (gd/imagick) only for the final JPEG encode.
+- **Compressed pixel codecs** (decode/encode JPEG Baseline, JPEG Lossless, JPEG-LS, JPEG 2000) -- **the wall.** gd cannot; imagick covers JPEG 2000 only if built with openjpeg and effectively not JPEG Lossless or JPEG-LS. Here native may mean a focused C codec (openjpeg / CharLS) or DCMTK may be the pragmatic choice. Decided at Phase 4 with real options in hand; JPEG 2000 stays v2.x.
+- **C-ECHO, C-STORE SCU/SCP** + post-receive handler hook -- native DIMSE/ACSE is feasible but heavy (an SCP daemon is awkward in PHP); native vs DCMTK decided at Phase 5.
+- **DCMTK ergonomics** (only for operations that use it) -- binary discovery via constructor / env var / PATH, version detection on first use, single cross-platform path resolver. Resolves the hardcoded-`TOOLKIT_DIR`/symlink friction. This is invoked by the DCMTK-backed operations, not run as a global startup step.
 
-Feature expansion beyond parity (native parsing, C-FIND/C-MOVE, TLS, pixel access, JPEG 2000, DICOMDIR, SR, UID generation, conformance statement) stays in the existing `ROADMAP.md` v2.x section.
+Feature expansion beyond parity (C-FIND/C-MOVE, TLS, pixel access, JPEG 2000, DICOMDIR, SR, UID generation, conformance statement) stays in the `ROADMAP.md` v2.x section. Native parsing, previously filed there, is part of v2.0 by design under native-first.
 
 ---
 
@@ -85,12 +87,12 @@ Feature expansion beyond parity (native parsing, C-FIND/C-MOVE, TLS, pixel acces
 
 One logical checkpoint per phase; commit per checkpoint on the `claude` branch.
 
-- **Phase 0 -- License & scaffold.** `LICENSE`, `NOTICE`, SPDX header template, `composer.json` relicense + PSR-4 autoload, empty `src/` skeleton, CI workflow stub. No behavior yet. This phase makes the Apache-2.0 footing real before a line of logic is written.
-- **Phase 1 -- Toolkit foundation.** `DCMTK\Toolkit` (discovery, version check, validated exec), the shared exception hierarchy, `is_dcm()`/transfer-syntax detection.
-- **Phase 2 -- Tags.** Read and write, common VRs, against fixtures.
-- **Phase 3 -- Conversion.** DICOM↔JPEG, thumbnails, JPEG→DICOM (with the warning-handling fix).
-- **Phase 4 -- Compression.** Transfer-syntax conversion both directions.
-- **Phase 5 -- Networking (`PACS\`).** C-ECHO, C-STORE SCU, C-STORE SCP + handler hook.
+- **Phase 0 -- License & scaffold.** (done) `LICENSE`, `NOTICE`, SPDX header convention, `composer.json` relicense + PSR-4 autoload, `src/` skeleton, CI workflow. No behavior.
+- **Phase 1 -- Native foundation.** The native DICOM file/stream model: Part 10 + File Meta parsing, `is_dcm()`/transfer-syntax detection, and the shared exception hierarchy. No DCMTK.
+- **Phase 2 -- Tags.** Native tag read/write across Implicit/Explicit VR using the data dictionary, against fixtures.
+- **Phase 3 -- Conversion (native parts).** Implicit<->Explicit VR conversion, JPEG->DICOM encapsulation, and DICOM->JPEG/thumbnails/window-level for uncompressed pixel data (imaging library for the encode only). No DCMTK.
+- **Phase 4 -- Compressed codecs (the wall).** Decode/encode for compressed transfer syntaxes. Native where feasible; introduce a DCMTK-backed (or C-codec) implementation only for the codecs where native is not viable. `DCMTK\Toolkit` is built here, if it is needed at all.
+- **Phase 5 -- Networking (`PACS\`).** C-ECHO, C-STORE SCU, C-STORE SCP + handler hook. Native DIMSE or DCMTK, decided here.
 - **Phase 6 -- Backward-compatibility shim.** A newly authored class preserving the v1 public surface, delegating into the `DICOM\`/`PACS\` classes and emitting `E_USER_DEPRECATED` (see §7). Shipped via Composer `classmap`/`files` autoload, since it is intentionally a global (non-namespaced) class; tested against the same behavioral oracle as the real classes. The legacy `class_dicom.php` is removed in this phase -- the shim replaces it.
 - **Phase 7 -- Docs & release.** README rewrite, migration guide (§7), conformance notes, tag `v2.0.0`.
 
@@ -115,10 +117,10 @@ This is the maintainer's only library with real external consumers via Packagist
 Per the project's testing standards -- tests verify real behavior, never monkeypatch the unit under test, and are never satisfied by contorting the code:
 
 - **Behavioral oracle.** Cross-validate against pydicom/pynetdicom (the existing `tests/` already do this) -- tags, conversions, compression, and networking checked against an independent implementation.
-- **Real DCMTK, real DICOM.** No mocking of the toolkit boundary's *logic*; tests run against an actual DCMTK install and real sample files. Test doubles are acceptable only for genuinely external boundaries (e.g. an unreachable network host), not for the behavior under test.
+- **Real inputs; real DCMTK only where used.** Native paths are tested directly against real DICOM files with pydicom as the oracle. For any operation implemented via DCMTK, tests run against an actual DCMTK install -- no mocking the toolkit boundary's logic. Test doubles are acceptable only for genuinely external boundaries (e.g. an unreachable network host), not for the behavior under test.
 - **Error paths are first-class.** Missing files, invalid DICOM, unreachable hosts, malformed tags, missing binaries -- each asserts the specific exception, not just "it didn't crash."
 - **Fixture breadth.** Multiple transfer syntaxes (Implicit VR, Explicit VR, JPEG Baseline, JPEG Lossless) and modalities (CR, CT, MR, US, multi-frame).
-- **CI matrix.** GitHub Actions on PHP 8.5 against the current DCMTK package, on every push; add 8.6 to the matrix when it releases (~Nov 2026).
+- **CI matrix.** GitHub Actions on PHP 8.5, on every push. The native phases need only PHP; DCMTK is installed in CI only once a DCMTK-backed operation exists (Phase 4+). Add 8.6 to the matrix when it releases (~Nov 2026).
 
 ---
 
@@ -126,9 +128,10 @@ Per the project's testing standards -- tests verify real behavior, never monkeyp
 
 v2.0.0 is done when:
 
-1. Every capability in §5 works against real DCMTK, with a descriptive exception on every failure path.
+1. Every capability in §5 works -- native where chosen, DCMTK where chosen -- with a descriptive exception on every failure path.
 2. The CI matrix is green across the PHP version range.
 3. `LICENSE`, `NOTICE`, and SPDX headers are present and consistent; `composer.json` declares Apache-2.0.
 4. No file references, reproduces, or derives from the legacy `class_dicom.php` -- the new classes and the compat shim trace entirely to the DICOM standard, DCMTK docs, the published v1 surface (README/examples), and this plan.
 5. The backward-compatibility shim preserves the v1 public surface, delegates into the new classes, and emits deprecation warnings -- validated against the behavioral oracle.
 6. The migration guide is published; `v1.1.0` is tagged on the default branch and the legacy file is removed from the v2 line.
+7. Native operations carry no external runtime dependency; DCMTK is required only by the operations implemented via it, which fail loud with a descriptive exception when it is absent.

@@ -28,17 +28,19 @@ Because this package has external Packagist consumers, v2 ships a backward-compa
 
 ### Language and structure
 
-- **Namespaces and PSR-4 autoloading.** Move classes under peer `DICOM\` and `PACS\` namespaces (with a shared `DCMTK\` toolkit layer), `src/` layout, Composer-autoloadable without a classmap. PACS networking is split out as a peer rather than conflated into the DICOM class as in v1; casing follows the project's acronym convention. See [docs/v2-rewrite-plan.md](docs/v2-rewrite-plan.md) §4.
+- **Namespaces and PSR-4 autoloading.** Move classes under peer `DICOM\` and `PACS\` namespaces (plus a `DCMTK\` namespace housing the operations implemented via DCMTK), `src/` layout, Composer-autoloadable without a classmap. PACS networking is split out as a peer rather than conflated into the DICOM class as in v1; casing follows the project's acronym convention. See [docs/v2-rewrite-plan.md](docs/v2-rewrite-plan.md) §4.
 - **Typed properties and return types.** Replace `var` declarations with typed, visibility-scoped properties. Add parameter and return type declarations to all public methods.
 - **Exception-based error handling.** Every method that currently returns `0` or an empty string on failure should throw a descriptive exception. Silent failures are the primary source of bugs in the current codebase.
 - **Configurable toolkit path.** Replace the top-level `define('TOOLKIT_DIR', ...)` with constructor injection or a configuration object. The library should be usable without editing source files.
 - **Remove global functions.** `Execute()` and `is_dcm()` should move into appropriate classes or a utility namespace. `Execute()` specifically should validate that the binary exists before attempting to run it.
 
-### DCMTK dependency management
+### Native-first, DCMTK only where needed
 
-- **Binary discovery.** Auto-detect DCMTK installation path via `which` / environment variable / constructor parameter, falling back to a configurable default. Throw on missing binaries at construction time, not at first use.
-- **Version detection.** Read DCMTK version at startup and warn or fail on known-incompatible versions.
-- **Windows path handling.** The current Windows detection works but the binary path construction is fragile. Consolidate into a single path resolver.
+The design is native-first (see [docs/v2-rewrite-plan.md](docs/v2-rewrite-plan.md) §4-§5): parsing, tag read/write, transfer-syntax detection, Implicit<->Explicit VR conversion, JPEG->DICOM encapsulation, and uncompressed image rendering are pure PHP and need nothing installed beyond PHP. DCMTK is the chosen implementation only where native is not viable -- realistically the compressed pixel codecs, and possibly DIMSE networking. This is a design-time choice per capability, not a runtime toggle.
+
+- **Discovery on first use, not at startup.** For the operations that use DCMTK, its path is resolved (constructor / env var / PATH) the first time such an operation runs, via a single cross-platform resolver; a missing binary throws a descriptive exception at that point. Native operations never trigger discovery.
+- **Version detection on first use,** with a clear error on a known-incompatible version.
+- **The DCMTK that gets used** is maintained by [OFFIS e.V.](https://www.offis.de/en/), a non-profit research institute in Oldenburg, under a 3-clause BSD license, actively maintained (3.7.0, January 2026). Because it parses untrusted input it receives security fixes (e.g. CVE-2025-14607 in `dcmdata`), so a consumer using a DCMTK-backed operation takes on tracking a patched version. Consumers using only native operations take on no such dependency.
 
 ### Testing
 
@@ -49,14 +51,6 @@ Because this package has external Packagist consumers, v2 ships a backward-compa
 ## v2.x -- feature expansion toward pydicom/pynetdicom parity
 
 These are targeted additions where PHP users currently have to shell out to DCMTK or reach for a Python stack. Full pydicom parity is not the goal -- the goal is covering the operations that matter in a PHP web application receiving, routing, and serving DICOM images.
-
-### Native DICOM parsing (reduce DCMTK dependency)
-
-DCMTK is developed and maintained by [OFFIS e.V.](https://www.offis.de/en/), a non-profit research institute in Oldenburg, Germany, and is distributed under a 3-clause BSD license. It is actively maintained on a roughly annual release cadence (3.7.0 in January 2026) with development continuing between releases -- a healthy dependency, not an abandoned one. The motivation for reducing and eventually replacing it is **dependency footprint, not licensing**: every downstream consumer of this library implicitly takes on DCMTK as an external runtime dependency they must install and keep patched. Because it parses untrusted DICOM input, DCMTK receives security fixes over time (e.g. CVE-2025-14607, a memory-corruption bug in `dcmdata`), so depending on this library means accepting that patch-tracking responsibility. Eliminating the external toolchain entirely -- the read path first, then conversion and networking -- is the long-term aim the items below build toward.
-
-- **Tag reading without dcmdump.** Parse the DICOM binary format directly in PHP for tag extraction. This removes the most common reason to shell out and makes the library usable on hosts without DCMTK installed (read-only use case).
-- **Tag writing without dcmodify.** Binary-level tag insertion and modification for the common VR types (LO, PN, DA, TM, UI, SH, CS). Complex VRs (SQ, OW, OF) can remain DCMTK-dependent initially.
-- **Transfer syntax detection.** Read the transfer syntax UID from file meta without a full tag parse, so `is_dcm()` can work without DCMTK.
 
 ### DICOM networking
 
