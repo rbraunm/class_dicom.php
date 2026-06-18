@@ -7,7 +7,7 @@ Every PHP source file under `src/` begins with this header:
 ```php
 <?php
 // SPDX-License-Identifier: Apache-2.0
-// Copyright (c) 2026 <COPYRIGHT_HOLDER>
+// Copyright (c) 2026 Randy Braunm
 declare(strict_types=1);
 ```
 

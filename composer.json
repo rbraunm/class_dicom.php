@@ -16,8 +16,8 @@
     },
     "authors": [
         {
-            "name": "<COPYRIGHT_HOLDER>",
-            "email": "<EMAIL>"
+            "name": "Randy Braunm",
+            "email": "randy@unseencolor.com"
         }
     ],
     "minimum-stability": "stable"
