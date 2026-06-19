@@ -30,6 +30,17 @@ exactly one place.
 - `docker/` -- **CI consumption.** A Dockerfile that runs `provision.sh`, published
   to GHCR so GitHub Actions pulls the prebuilt image instead of reinstalling per run.
 
+## `research/` -- Phase 0.5 surface & capability inventory
+
+One-off tooling that freezes what v1 *is*, so v2 targets a fixed contract instead of overbuilding.
+Run in the dev container (via `devenv/lxc/ct_exec.py`); the outputs land in `docs/`.
+
+- `reflectV1Surface.php` -- includes the legacy library and emits its public surface (classes ->
+  public methods/constants/properties, plus top-level functions) as deterministic JSON. It finds
+  the symbols by diffing the declared classes/functions across the include, so it never reads the
+  source text, and reflection yields signatures, not bodies -- clean-room, interface facts only.
+  Output: `docs/v1-surface.json` (the frozen contract for the v2 compatibility shim).
+
 ## Key handling
 
 Any SSH key the LXC provisioner generates is written to a `keys/` directory that is
