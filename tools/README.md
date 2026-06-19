@@ -40,6 +40,14 @@ Run in the dev container (via `devenv/lxc/ct_exec.py`); the outputs land in `doc
   the symbols by diffing the declared classes/functions across the include, so it never reads the
   source text, and reflection yields signatures, not bodies -- clean-room, interface facts only.
   Output: `docs/v1-surface.json` (the frozen contract for the v2 compatibility shim).
+- `makeToolShims.sh` -- installs logging wrappers in `/usr/local/bin` (v1's default `TOOLKIT_DIR`)
+  for every DCMTK binary (`dpkg -L dcmtk`) plus `ffmpeg`; each records `tool + argv` to a log, then
+  exec's the real tool. This is how the next step learns which tool each operation actually calls.
+- `exerciseV1Surface.php` -- drives each public method over the staged fixtures so the shims capture
+  the calls, writing an `### OP` marker before each so calls attribute to operations. Calls the
+  public API only (usage, never the source). Feeds `docs/v1-capability-map.md`.
+- `makeMultiframeFixture.py` -- synthesizes a small multi-frame DICOM (pydicom only) so
+  `multiframe_to_video` can be exercised far enough to capture its DCMTK + `ffmpeg` invocation.
 
 ## Key handling
 
