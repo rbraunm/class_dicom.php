@@ -1,0 +1,503 @@
+{
+    "meta": {
+        "generator": "tools/research/reflectV1Surface.php",
+        "description": "class_dicom.php v1 public surface, reflected. Interface facts only (names, signatures, visibility); no implementation. Frozen contract for the v2 compatibility shim."
+    },
+    "functions": [
+        {
+            "name": "Execute",
+            "returnType": null,
+            "parameters": [
+                {
+                    "name": "command",
+                    "position": 0,
+                    "type": null,
+                    "optional": false,
+                    "variadic": false,
+                    "byReference": false,
+                    "hasDefault": false
+                }
+            ]
+        },
+        {
+            "name": "is_dcm",
+            "returnType": null,
+            "parameters": [
+                {
+                    "name": "file",
+                    "position": 0,
+                    "type": null,
+                    "optional": false,
+                    "variadic": false,
+                    "byReference": false,
+                    "hasDefault": false
+                }
+            ]
+        }
+    ],
+    "classes": [
+        {
+            "name": "dicom_convert",
+            "kind": "class",
+            "methods": [
+                {
+                    "name": "__construct",
+                    "static": false,
+                    "abstract": false,
+                    "returnType": null,
+                    "parameters": [
+                        {
+                            "name": "file",
+                            "position": 0,
+                            "type": null,
+                            "optional": true,
+                            "variadic": false,
+                            "byReference": false,
+                            "hasDefault": true,
+                            "default": ""
+                        }
+                    ]
+                },
+                {
+                    "name": "compress",
+                    "static": false,
+                    "abstract": false,
+                    "returnType": null,
+                    "parameters": [
+                        {
+                            "name": "new_file",
+                            "position": 0,
+                            "type": null,
+                            "optional": true,
+                            "variadic": false,
+                            "byReference": false,
+                            "hasDefault": true,
+                            "default": ""
+                        }
+                    ]
+                },
+                {
+                    "name": "dcm_to_jpg",
+                    "static": false,
+                    "abstract": false,
+                    "returnType": null,
+                    "parameters": []
+                },
+                {
+                    "name": "dcm_to_tn",
+                    "static": false,
+                    "abstract": false,
+                    "returnType": null,
+                    "parameters": []
+                },
+                {
+                    "name": "jpg_to_dcm",
+                    "static": false,
+                    "abstract": false,
+                    "returnType": null,
+                    "parameters": [
+                        {
+                            "name": "arr_info",
+                            "position": 0,
+                            "type": null,
+                            "optional": false,
+                            "variadic": false,
+                            "byReference": false,
+                            "hasDefault": false
+                        }
+                    ]
+                },
+                {
+                    "name": "multiframe_to_video",
+                    "static": false,
+                    "abstract": false,
+                    "returnType": null,
+                    "parameters": [
+                        {
+                            "name": "format",
+                            "position": 0,
+                            "type": null,
+                            "optional": true,
+                            "variadic": false,
+                            "byReference": false,
+                            "hasDefault": true,
+                            "default": "mp4"
+                        },
+                        {
+                            "name": "framerate",
+                            "position": 1,
+                            "type": null,
+                            "optional": true,
+                            "variadic": false,
+                            "byReference": false,
+                            "hasDefault": true,
+                            "default": 24
+                        },
+                        {
+                            "name": "temp_dir",
+                            "position": 2,
+                            "type": null,
+                            "optional": true,
+                            "variadic": false,
+                            "byReference": false,
+                            "hasDefault": true,
+                            "default": "./video_temp"
+                        }
+                    ]
+                },
+                {
+                    "name": "pdf_to_dcm",
+                    "static": false,
+                    "abstract": false,
+                    "returnType": null,
+                    "parameters": [
+                        {
+                            "name": "arr_info",
+                            "position": 0,
+                            "type": null,
+                            "optional": false,
+                            "variadic": false,
+                            "byReference": false,
+                            "hasDefault": false
+                        }
+                    ]
+                },
+                {
+                    "name": "pdf_to_dcmcr",
+                    "static": false,
+                    "abstract": false,
+                    "returnType": null,
+                    "parameters": [
+                        {
+                            "name": "arr_info",
+                            "position": 0,
+                            "type": null,
+                            "optional": false,
+                            "variadic": false,
+                            "byReference": false,
+                            "hasDefault": false
+                        }
+                    ]
+                },
+                {
+                    "name": "uncompress",
+                    "static": false,
+                    "abstract": false,
+                    "returnType": null,
+                    "parameters": [
+                        {
+                            "name": "new_file",
+                            "position": 0,
+                            "type": null,
+                            "optional": true,
+                            "variadic": false,
+                            "byReference": false,
+                            "hasDefault": true,
+                            "default": ""
+                        }
+                    ]
+                }
+            ],
+            "constants": [],
+            "properties": [
+                {
+                    "name": "file",
+                    "static": false,
+                    "type": null
+                },
+                {
+                    "name": "jpg_file",
+                    "static": false,
+                    "type": null
+                },
+                {
+                    "name": "jpg_quality",
+                    "static": false,
+                    "type": null
+                },
+                {
+                    "name": "temp_dir",
+                    "static": false,
+                    "type": null
+                },
+                {
+                    "name": "template",
+                    "static": false,
+                    "type": null
+                },
+                {
+                    "name": "tn_file",
+                    "static": false,
+                    "type": null
+                },
+                {
+                    "name": "tn_size",
+                    "static": false,
+                    "type": null
+                }
+            ]
+        },
+        {
+            "name": "dicom_net",
+            "kind": "class",
+            "methods": [
+                {
+                    "name": "echoscu",
+                    "static": false,
+                    "abstract": false,
+                    "returnType": null,
+                    "parameters": [
+                        {
+                            "name": "host",
+                            "position": 0,
+                            "type": null,
+                            "optional": false,
+                            "variadic": false,
+                            "byReference": false,
+                            "hasDefault": false
+                        },
+                        {
+                            "name": "port",
+                            "position": 1,
+                            "type": null,
+                            "optional": false,
+                            "variadic": false,
+                            "byReference": false,
+                            "hasDefault": false
+                        },
+                        {
+                            "name": "my_ae",
+                            "position": 2,
+                            "type": null,
+                            "optional": true,
+                            "variadic": false,
+                            "byReference": false,
+                            "hasDefault": true,
+                            "default": "DEANO"
+                        },
+                        {
+                            "name": "remote_ae",
+                            "position": 3,
+                            "type": null,
+                            "optional": true,
+                            "variadic": false,
+                            "byReference": false,
+                            "hasDefault": true,
+                            "default": "DEANO"
+                        }
+                    ]
+                },
+                {
+                    "name": "send_dcm",
+                    "static": false,
+                    "abstract": false,
+                    "returnType": null,
+                    "parameters": [
+                        {
+                            "name": "host",
+                            "position": 0,
+                            "type": null,
+                            "optional": false,
+                            "variadic": false,
+                            "byReference": false,
+                            "hasDefault": false
+                        },
+                        {
+                            "name": "port",
+                            "position": 1,
+                            "type": null,
+                            "optional": false,
+                            "variadic": false,
+                            "byReference": false,
+                            "hasDefault": false
+                        },
+                        {
+                            "name": "my_ae",
+                            "position": 2,
+                            "type": null,
+                            "optional": true,
+                            "variadic": false,
+                            "byReference": false,
+                            "hasDefault": true,
+                            "default": "DEANO"
+                        },
+                        {
+                            "name": "remote_ae",
+                            "position": 3,
+                            "type": null,
+                            "optional": true,
+                            "variadic": false,
+                            "byReference": false,
+                            "hasDefault": true,
+                            "default": "DEANO"
+                        },
+                        {
+                            "name": "send_batch",
+                            "position": 4,
+                            "type": null,
+                            "optional": true,
+                            "variadic": false,
+                            "byReference": false,
+                            "hasDefault": true,
+                            "default": 0
+                        }
+                    ]
+                },
+                {
+                    "name": "store_server",
+                    "static": false,
+                    "abstract": false,
+                    "returnType": null,
+                    "parameters": [
+                        {
+                            "name": "port",
+                            "position": 0,
+                            "type": null,
+                            "optional": false,
+                            "variadic": false,
+                            "byReference": false,
+                            "hasDefault": false
+                        },
+                        {
+                            "name": "dcm_dir",
+                            "position": 1,
+                            "type": null,
+                            "optional": false,
+                            "variadic": false,
+                            "byReference": false,
+                            "hasDefault": false
+                        },
+                        {
+                            "name": "handler_script",
+                            "position": 2,
+                            "type": null,
+                            "optional": false,
+                            "variadic": false,
+                            "byReference": false,
+                            "hasDefault": false
+                        },
+                        {
+                            "name": "config_file",
+                            "position": 3,
+                            "type": null,
+                            "optional": false,
+                            "variadic": false,
+                            "byReference": false,
+                            "hasDefault": false
+                        },
+                        {
+                            "name": "debug",
+                            "position": 4,
+                            "type": null,
+                            "optional": true,
+                            "variadic": false,
+                            "byReference": false,
+                            "hasDefault": true,
+                            "default": 0
+                        }
+                    ]
+                }
+            ],
+            "constants": [],
+            "properties": [
+                {
+                    "name": "file",
+                    "static": false,
+                    "type": null
+                },
+                {
+                    "name": "transfer_syntax",
+                    "static": false,
+                    "type": null
+                }
+            ]
+        },
+        {
+            "name": "dicom_tag",
+            "kind": "class",
+            "methods": [
+                {
+                    "name": "__construct",
+                    "static": false,
+                    "abstract": false,
+                    "returnType": null,
+                    "parameters": [
+                        {
+                            "name": "file",
+                            "position": 0,
+                            "type": null,
+                            "optional": true,
+                            "variadic": false,
+                            "byReference": false,
+                            "hasDefault": true,
+                            "default": ""
+                        }
+                    ]
+                },
+                {
+                    "name": "get_tag",
+                    "static": false,
+                    "abstract": false,
+                    "returnType": null,
+                    "parameters": [
+                        {
+                            "name": "group",
+                            "position": 0,
+                            "type": null,
+                            "optional": false,
+                            "variadic": false,
+                            "byReference": false,
+                            "hasDefault": false
+                        },
+                        {
+                            "name": "element",
+                            "position": 1,
+                            "type": null,
+                            "optional": false,
+                            "variadic": false,
+                            "byReference": false,
+                            "hasDefault": false
+                        }
+                    ]
+                },
+                {
+                    "name": "load_tags",
+                    "static": false,
+                    "abstract": false,
+                    "returnType": null,
+                    "parameters": []
+                },
+                {
+                    "name": "write_tags",
+                    "static": false,
+                    "abstract": false,
+                    "returnType": null,
+                    "parameters": [
+                        {
+                            "name": "tag_arr",
+                            "position": 0,
+                            "type": null,
+                            "optional": false,
+                            "variadic": false,
+                            "byReference": false,
+                            "hasDefault": false
+                        }
+                    ]
+                }
+            ],
+            "constants": [],
+            "properties": [
+                {
+                    "name": "file",
+                    "static": false,
+                    "type": null
+                },
+                {
+                    "name": "tags",
+                    "static": false,
+                    "type": null
+                }
+            ]
+        }
+    ]
+}
