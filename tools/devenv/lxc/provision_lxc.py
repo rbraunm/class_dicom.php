@@ -219,7 +219,7 @@ def create_container(args) -> None:
         f"--hostname {shlex.quote(args.name)} "
         f"--cores {args.cores} --memory {args.memory} --swap {args.swap} "
         f"--rootfs {rootfs} --net0 {shlex.quote(net)}{dns} "
-        f"--unprivileged 1 --onboot 0 --tags {shlex.quote(args.tags)} --start 1"
+        f"--unprivileged 1 --features nesting=1 --onboot 0 --tags {shlex.quote(args.tags)} --start 1"
     )
 
 
