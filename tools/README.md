@@ -22,6 +22,11 @@ exactly one place.
   LXC, clones the repo, runs `provision.sh` from the clone, runs `composer install`, and enables a
   key-based login. The ed25519 keypair is generated into `lxc/keys/` (git-ignored); only the public
   half is installed in the container. Needs `paramiko` where you run it (`pip install paramiko`).
+- `lxc/ct_exec.py` -- run a single command on a provisioned container over SSH using the
+  generated key (no password). Reads the address/user from the login file `provision_lxc.py`
+  leaves in `lxc/keys/` (`<name>-ssh.txt`), so `python tools/devenv/lxc/ct_exec.py -- nproc`
+  just works once a container exists. Combined output streams live; it exits with the remote
+  command's status, so it composes in scripts.
 - `docker/` -- **CI consumption.** A Dockerfile that runs `provision.sh`, published
   to GHCR so GitHub Actions pulls the prebuilt image instead of reinstalling per run.
 

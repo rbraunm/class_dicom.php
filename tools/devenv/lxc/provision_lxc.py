@@ -328,7 +328,26 @@ def container_ip(ctid: int) -> str:
     return parts[0] if parts else ""
 
 
-def report(args, ip: str, key: str, mdns_name: str) -> None:
+def write_credentials(args, ip: str, key: str, mdns_name: str) -> str:
+    """Leave a 'key: value' login file beside the keypair so ct_exec.py can reach the container
+    with no flags. Address prefers the IP and falls back to the mDNS name. No secret lives here --
+    the private key stays in its own 0600 file; this only records where and who to log in as."""
+    address = ip or (f"{mdns_name}.local" if mdns_name else "")
+    path = os.path.join(KEY_DIR, f"{args.name}-ssh.txt")
+    body = "\n".join((
+        f"name: {args.name}",
+        f"ctid: {args.ctid}",
+        f"node: {SSH_TARGET}",
+        f"address: {address or '(unknown -- pass --host to ct_exec.py)'}",
+        f"user: {args.ssh_user}",
+        f"key: {os.path.basename(key)}",
+    )) + "\n"
+    with open(path, "w") as f:
+        f.write(body)
+    return path
+
+
+def report(args, ip: str, key: str, mdns_name: str, creds: str) -> None:
     target = ip or (f"{mdns_name}.local" if mdns_name else "<container-ip>")
     print("\n[7/7] Done.")
     print(f"  CT {args.ctid} ({args.name}) is up{(' at ' + ip) if ip else ''} on {SSH_TARGET}.")
@@ -338,8 +357,10 @@ def report(args, ip: str, key: str, mdns_name: str) -> None:
     if mdns_name:
         print(f"  Advertised over mDNS as {mdns_name}.local (link-local; needs an mDNS reflector to cross VLANs).")
     print(f"\n  Connect:  ssh -i {key} {args.ssh_user}@{target}")
+    print(f"  Run a command:  python {os.path.join('tools', 'devenv', 'lxc', 'ct_exec.py')} --name {args.name} -- dcmdump --version")
     print(f"  Run the suite:  cd {BASE}/src && vendor/bin/phpunit")
     print(f"  Update later:   git -C {BASE}/src pull")
+    print(f"  (login file for ct_exec.py: {creds})")
 
 
 def main() -> None:
@@ -399,7 +420,8 @@ def main() -> None:
                 )
             setup_mdns(args.ctid, mdns_name)
         ip = container_ip(args.ctid)
-        report(args, ip, key, mdns_name if not args.no_mdns else "")
+        creds = write_credentials(args, ip, key, mdns_name if not args.no_mdns else "")
+        report(args, ip, key, mdns_name if not args.no_mdns else "", creds)
     finally:
         _CLIENT.close()
 
