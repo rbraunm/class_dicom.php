@@ -22,6 +22,7 @@ log="${V1_SHIM_LOG:?set V1_SHIM_LOG to the capture-log path}"
 install -d "$shimDir"
 install -d "$(dirname "$log")"
 : > "$log"
+chmod 0666 "$log"   # the harness runs as the non-root dev user and appends OP markers
 
 mapfile -t tools < <(dpkg -L dcmtk | sed -n 's#^/usr/bin/##p' | sort -u)
 if command -v ffmpeg >/dev/null 2>&1; then

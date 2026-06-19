@@ -292,13 +292,19 @@ def setup_ssh(ctid: int, args, key: str) -> None:
         pub = f.read().strip()
     exec_in(ctid,
             "export DEBIAN_FRONTEND=noninteractive LANG=C.UTF-8\n"
-            "apt-get install -y -qq openssh-server\n"
+            "apt-get install -y -qq openssh-server sudo\n"
             f"id -u {user} >/dev/null 2>&1 || useradd --create-home --shell /bin/bash {user}\n"
             f"chown -R {user}:{user} {BASE}\n"   # the login owns its tools: run, pull, write caches
             f"install -d -m 0700 -o {user} -g {user} {home}/.ssh\n"
             f"printf '%s\\n' {shlex.quote(pub)} > {home}/.ssh/authorized_keys\n"
             f"chown {user}:{user} {home}/.ssh/authorized_keys\n"
             f"chmod 600 {home}/.ssh/authorized_keys\n"
+            # Passwordless sudo for the dev login: this is a disposable dev/test box, and ct_exec
+            # logs in as this unprivileged user, which still needs root for apt and /usr/local/bin.
+            "install -d -m 0755 /etc/sudoers.d\n"
+            f"printf '%s ALL=(ALL) NOPASSWD:ALL\\n' {user} > /etc/sudoers.d/10-devuser\n"
+            "chmod 0440 /etc/sudoers.d/10-devuser\n"
+            "visudo -cf /etc/sudoers.d/10-devuser\n"   # reject a malformed drop-in loudly
             "install -d -m 0755 /etc/ssh/sshd_config.d\n"
             "printf 'PubkeyAuthentication yes\\nPasswordAuthentication no\\n'"
             " > /etc/ssh/sshd_config.d/10-class-dicom.conf\n"
@@ -307,7 +313,8 @@ def setup_ssh(ctid: int, args, key: str) -> None:
             # assert the postcondition: the unit is active and key auth is effective
             "systemctl is-active --quiet ssh\n"
             "sshd -T 2>/dev/null | grep -i '^pubkeyauthentication yes'\n"
-            "echo 'verified: sshd is active with key auth effective'\n")
+            f"runuser -u {user} -- sudo -n true\n"   # assert NOPASSWD sudo is effective
+            "echo 'verified: sshd active with key auth, dev user has passwordless sudo'\n")
 
 
 def setup_mdns(ctid: int, mdns_name: str) -> None:
