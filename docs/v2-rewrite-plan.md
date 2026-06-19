@@ -52,7 +52,7 @@ The v1 line keeps its existing `composer.json` as-is on the default branch (see 
 
 Modern PHP, no manual configuration, loud failure. v2 is a typed PHP wrapper over the DCMTK command-line toolset.
 
-- **Wrapper-first by design.** Every DICOM operation is a validated invocation of the appropriate DCMTK tool. v2 does not implement DICOM semantics natively: the format parsing, the pixel codecs, and the DIMSE protocol are DCMTK's, and v2 wraps them rather than re-deriving them. Native PHP is where all the orchestration lives -- binary discovery, process execution, argument escaping, command-result objects, `dcmdump` output parsing, tag-value normalization, file-path handling, exceptions, the compat-shim delegation, and any template generation a tool needs (e.g. the XML for `img2dcm`). The rule is precise: PHP never re-implements something DCMTK already does.
+- **Wrapper-first by design.** Every DICOM operation is a validated invocation of the appropriate DCMTK tool. v2 does not implement DICOM semantics natively: the format parsing, the pixel codecs, and the DIMSE protocol are DCMTK's, and v2 wraps them rather than re-deriving them. Native PHP is where all the orchestration lives -- binary discovery, process execution, argument escaping, command-result objects, `dcmdump` output parsing, tag-value normalization, file-path handling, exceptions, the compat-shim delegation, and any template generation a tool needs (e.g. the XML for `xml2dcm`). The rule is precise: PHP never re-implements something DCMTK already does.
 - **DCMTK is a hard runtime requirement.** This matches v1, whose README already requires DCMTK across the board. Its absence fails loud with a descriptive exception. We accept the supply-chain dependency deliberately: the correctness of DICOM operations rides on a 30-year-maintained implementation rather than on hand-rolled PHP.
 - **v2's scope is exactly v1's capability set.** v2 faithfully replaces what v1 did -- no more -- under a clean license and a modern design. The broader ambition of a full PHP interface to the DCMTK toolset is real but deliberately deferred to **v3**, so the relicensed replacement ships without the scope growing unmanageable. v1 parity is what the shim guarantees.
 - **PSR-4 autoloading** under peer top-level namespaces, `src/` layout, Composer-loadable with no classmap. Namespaces are uppercased per the project's acronym convention: `DICOM\`, `PACS\`, `DCMTK\` -- not `Dicom\`.
@@ -90,18 +90,20 @@ v2 faithfully wraps DCMTK's functionality. The correctness of each underlying DI
 
 v1-parity capabilities and the DCMTK tool that provides each (tool choice and arguments authored from DCMTK docs; the historical feature set confirmed against the call map):
 
-- **Detection / metadata** (`is_dcm`, transfer syntax, read tags) -- `dcmftest` for the Part 10 check, `dcmdump` for transfer syntax and tag values.
+- **Detection / metadata** (`is_dcm`, transfer syntax, read tags) -- `dcmftest` for the Part 10 check, `dcmdump` for transfer syntax and tag values. (v1 itself ran `dcmdump -M +L +Qn` for the `is_dcm` check, not `dcmftest`; `dcmftest` vs `dcmdump` for v2 detection is a Phase 1 choice, not a parity requirement.)
 - **Tag modify / insert** -- `dcmodify`.
-- **Transfer-syntax conversion** (Implicit <-> Explicit VR) -- `dcmconv`.
 - **Compression / decompression** (`compress`, `uncompress`) -- `dcmcjpeg` / `dcmdjpeg`; JPEG 2000 only where the DCMTK build includes the module (a recorded gap if not).
 - **DICOM -> JPEG / thumbnails / window-level** -- `dcmj2pnm` with the appropriate windowing and scaling flags.
-- **JPEG -> DICOM** -- `img2dcm`.
+- **JPEG -> DICOM** (`jpg_to_dcm`) -- `img2dcm`. (v1 instead filled a template and ran `xml2dcm` -- the path where its SOPInstanceUID bug lives; `img2dcm` vs `xml2dcm` for v2 is a Phase 3 choice.)
+- **PDF -> DICOM** (`pdf_to_dcm`, `pdf_to_dcmcr`) -- `pdf2dcm` (hypothesis). v1's tool is unconfirmed: the capability capture intercepted no external tool for these, so both the input contract and the actual tool are open, to resolve in Phase 3.
 - **Multi-frame -> video** -- `dcmj2pnm` for frame extraction; video encoding is outside DCMTK (an external encoder such as ffmpeg). Flagged as a DCMTK gap: the wrapper covers frame extraction; the video step is either an additional dependency or out of scope, decided when reached.
 - **C-ECHO** -- `echoscu`.
 - **C-STORE SCU** (`send_dcm`) -- `storescu`.
 - **C-STORE SCP** (`store_server`) + post-receive handler hook -- `storescp`.
 
 The committed Phase 1 detection tests (`isDICOM` returns the right bool, `transferSyntaxUID` the right UID) are implementation-agnostic and hold unchanged: they are now satisfied by wrapping `dcmftest`/`dcmdump` rather than by native parsing.
+
+This capability set is reconciled against the frozen capability map (`v1-capability-map.md`). Standalone transfer-syntax conversion (`dcmconv`) was dropped from v1 parity -- no v1 method performs it and the capture never invoked it -- and is deferred to v3. Where v2's planned tool differs from what v1 actually ran (`dcmftest` vs v1's `dcmdump` for detection; `img2dcm` vs v1's `xml2dcm` for JPEG->DICOM), v1's mechanism is recorded but does not bind v2; the final tool is a Phase 1/3 design choice.
 
 Coverage beyond v1 (additional DCMTK tools, C-FIND/C-MOVE, TLS, DICOMDIR, SR, worklist, etc.) is **v3**, staged in `ROADMAP.md`. v2 ships exactly the v1-parity set wrapped (see §8) and nothing more; v2.x is maintenance of that wrapper, not feature growth.
 
@@ -139,8 +141,8 @@ One logical checkpoint per phase; commit per checkpoint on the `claude` branch. 
 - **Phase 0.5 -- Public surface & capability inventory.** Run the §6 research: reflection produces `docs/v1-surface.json` (the complete, frozen v1 public footprint) and the capability map produces `docs/v1-capability-map.md` (each v1 capability, its DCMTK tool, and any DCMTK gaps). This inventory is the frozen definition of v1 parity, committed before any wrapper code so implementation targets a fixed surface and does not overbuild. No library code.
 - **Phase 1 -- DCMTK substrate + detection.** `DCMTK\Toolkit` (discovery, version detection, argument construction, validated exec, output parsing) and the exception hierarchy, plus the first wrapped capability: detection/metadata (`DICOM\File` over `dcmftest`/`dcmdump`). Satisfies the committed detection tests. DCMTK is required from here on.
 - **Phase 2 -- Tags.** Read via `dcmdump`, write/insert via `dcmodify`, parsed into typed PHP, against fixtures.
-- **Phase 3 -- Conversion.** DICOM -> image (`dcmj2pnm`, including thumbnails and window-level) and image -> DICOM (`img2dcm`).
-- **Phase 4 -- Compression.** `compress`/`uncompress` via `dcmcjpeg`/`dcmdjpeg`, transfer-syntax conversion via `dcmconv`. JPEG 2000 only where the DCMTK build supports it (recorded otherwise).
+- **Phase 3 -- Conversion.** DICOM -> image (`dcmj2pnm`, including thumbnails and window-level), image -> DICOM (`img2dcm` vs v1's `xml2dcm`, decided here), and PDF -> DICOM (`pdf2dcm`; v1 tool unconfirmed).
+- **Phase 4 -- Compression.** `compress`/`uncompress` via `dcmcjpeg`/`dcmdjpeg`. JPEG 2000 only where the DCMTK build supports it (recorded otherwise). (Standalone transfer-syntax conversion via `dcmconv` is v3, not v1 parity.)
 - **Phase 5 -- Networking (`PACS\`).** C-ECHO (`echoscu`), C-STORE SCU (`storescu`), C-STORE SCP (`storescp`) + post-receive handler hook.
 - **Phase 6 -- Backward-compatibility shim.** A newly authored global class preserving the v1 public surface (from the reflection footprint), delegating into the `DICOM\`/`PACS\` wrappers and emitting `E_USER_DEPRECATED`; it preserves call compatibility, not bug compatibility (see §9). Autoloaded via Composer `classmap`/`files`. The legacy `class_dicom.php` is removed in this phase -- the shim replaces it.
 - **Phase 7 -- Docs & release.** README rewrite, migration guide (§9), conformance notes, tag `v2.0.0`.
