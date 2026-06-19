@@ -52,7 +52,7 @@ except ImportError:
 
 DEFAULT_REPO = "https://github.com/rbraunm/class_dicom.php.git"
 DEFAULT_BRANCH = "main"   # public default; pass --branch claude for unmerged dev work
-DEFAULT_TEMPLATE = "debian-13-standard_13.0-1_amd64.tar.zst"
+DEFAULT_TEMPLATE = "debian-13-standard"   # appliance prefix; the exact dist file is resolved from `pveam available`
 BASE = "/opt/class_dicom"   # in-container install root
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -141,13 +141,51 @@ def preflight() -> None:
         sys.exit(f"{SSH_TARGET} is missing pct/pveam -- is it a Proxmox node?")
 
 
-def ensure_template(template: str, template_storage: str) -> None:
-    print(f"[1/7] Ensuring template {template} is cached on {template_storage}...")
-    if template in capture(f"pveam list {template_storage}").stdout:
-        print("  already cached.")
-        return
+def _template_files(listing: str) -> list:
+    # Pull the *.tar.* dist filenames out of `pveam list` or `pveam available` output,
+    # stripping any `storage:vztmpl/` path so both formats normalize to a bare filename.
+    files = []
+    for line in listing.splitlines():
+        for field in line.split():
+            if field.endswith((".tar.zst", ".tar.gz", ".tar.xz")):
+                files.append(field.split("/")[-1])
+    return files
+
+
+def _resolve_template(files: list, wanted: str, where: str) -> str:
+    # An exact filename wins; otherwise treat `wanted` as a release prefix and require it
+    # to match exactly one dist file. Zero matches -> "" (caller decides). More than one ->
+    # fail loud rather than guess which version is newest.
+    if wanted in files:
+        return wanted
+    matches = sorted(f for f in files if f.startswith(wanted))
+    if len(matches) == 1:
+        return matches[0]
+    if not matches:
+        return ""
+    sys.exit(f"Template '{wanted}' is ambiguous {where} -- matches {matches}. Pass an exact --template.")
+
+
+def ensure_template(template: str, template_storage: str) -> str:
+    print(f"[1/7] Ensuring a '{template}' template is cached on {template_storage}...")
+    cached = _resolve_template(
+        _template_files(capture(f"pveam list {template_storage}").stdout),
+        template, f"in {template_storage}",
+    )
+    if cached:
+        print(f"  already cached: {cached}")
+        return cached
     run("pveam update")
-    run(f"pveam download {template_storage} {template}")
+    available = _template_files(capture("pveam available --section system").stdout)
+    chosen = _resolve_template(available, template, "in the pveam index")
+    if not chosen:
+        debian = [f for f in available if "debian" in f]
+        sys.exit(
+            f"No template matching '{template}' in the pveam index. "
+            f"Available debian system templates: {debian or '(none)'}."
+        )
+    run(f"pveam download {template_storage} {chosen}")
+    return chosen
 
 
 def create_container(args) -> None:
@@ -319,7 +357,8 @@ def main() -> None:
     parser.add_argument("--memory", type=int, default=4096, help="RAM in MiB (default 4096)")
     parser.add_argument("--swap", type=int, default=512, help="swap in MiB (default 512)")
     parser.add_argument("--template-storage", default="local", help="template storage")
-    parser.add_argument("--template", default=DEFAULT_TEMPLATE)
+    parser.add_argument("--template", default=DEFAULT_TEMPLATE,
+                        help=f"appliance prefix (e.g. {DEFAULT_TEMPLATE}) or an exact dist filename")
     parser.add_argument("--bridge", default="vmbr0", help="network bridge (default vmbr0)")
     parser.add_argument("--ip", default="dhcp",
                         help="container IPv4: 'dhcp' or CIDR like 10.0.0.5/24 (default dhcp)")
@@ -345,7 +384,7 @@ def main() -> None:
     _CLIENT = connect(args.host)
     try:
         preflight()
-        ensure_template(args.template, args.template_storage)
+        args.template = ensure_template(args.template, args.template_storage)
         create_container(args)
         wait_for_network(args.ctid)
         install_toolchain(args.ctid, args)
