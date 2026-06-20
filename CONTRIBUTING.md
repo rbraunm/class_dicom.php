@@ -33,10 +33,6 @@ and this library fails loud.
 
 - **PHP 8.5**, PSR-4 autoloading (`composer.json` maps the `DICOM\`, `PACS\`, and
   `DCMTK\` namespaces under `src/`).
-- **Names.** Classes and files are PascalCase per PSR-4. Methods, properties,
-  variables, and constants use `drinkingCamelCaseWithABBR`: the first word is fully
-  lowercase (acronyms included), and any later acronym keeps its own casing -- e.g.
-  `isDICOM`, `transferSyntaxUID`, `parseMetaUID`, `mediaStorageSOPClassUID`.
 - **Indentation.** 4-space, PSR-12.
 - **ASCII only** in code and comments. No em-dashes, curly quotes, or other
   non-ASCII characters.
