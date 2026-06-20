@@ -62,14 +62,14 @@ final class File
 
     private function requireMetaUID(string $group, string $element, string $name): string
     {
-        // -q quiet, -M skip very long values (pixel data), -Un raw UIDs not names,
-        // +P print only the requested tag so the output stays bounded.
+        // -q quiet, -M skip very long values (pixel data), -Un raw UIDs not names.
+        // +P search is intentionally not used: it does not cover the file-meta group,
+        // so it returns nothing for 0002,xxxx. Bounding the read to the meta header
+        // (e.g. +st) is a follow-up optimization.
         $result = $this->toolkit->run('dcmdump', [
             '-q',
             '-M',
             '-Un',
-            '+P',
-            "{$group},{$element}",
             $this->path,
         ]);
         if (!$result->succeeded()) {
@@ -98,7 +98,7 @@ final class File
     private static function parseMetaUID(string $dump, string $group, string $element): ?string
     {
         $pattern = sprintf(
-            '/^\(%s,%s\)\s+UI\s+=([^#\r\n]*)/mi',
+            '/^\s*\(%s,%s\)\s+UI\s+=([^#\r\n]*)/mi',
             preg_quote($group, '/'),
             preg_quote($element, '/'),
         );
