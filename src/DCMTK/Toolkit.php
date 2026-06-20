@@ -7,6 +7,7 @@ namespace DCMTK;
 
 use DCMTK\Exception\BinaryNotFoundException;
 use DCMTK\Exception\InvocationFailedException;
+use DCMTK\Exception\UnexpectedOutputException;
 
 /**
  * The substrate every DICOM/PACS wrapper runs through: it locates DCMTK tools,
@@ -89,7 +90,11 @@ final class Toolkit
         );
     }
 
-    /** First line of a tool's `--version` output (identifies the installed DCMTK). */
+    /**
+     * First line of a tool's `--version` output (identifies the installed DCMTK).
+     * Throws if the tool exits non-zero or emits no parseable version line; never
+     * returns an empty string.
+     */
     public function version(string $tool = 'dcmdump'): string
     {
         $result = $this->run($tool, ['--version']);
@@ -99,8 +104,14 @@ final class Toolkit
             );
         }
         $firstLine = strtok($result->stdout, "\n");
+        $version = $firstLine === false ? '' : trim($firstLine);
+        if ($version === '') {
+            throw new UnexpectedOutputException(
+                "'{$tool} --version' produced no parseable version line.",
+            );
+        }
 
-        return $firstLine === false ? '' : trim($firstLine);
+        return $version;
     }
 
     /** @return list<string> */
