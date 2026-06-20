@@ -92,13 +92,14 @@ final class File
     }
 
     /**
-     * Pull a UI-VR value out of a dcmdump line produced with -Un, e.g.
-     * "(0002,0010) UI =1.2.840.10008.1.2.1    #  18, 1 TransferSyntaxUID".
+     * Pull a UI-VR value out of a dcmdump line produced with -Un, where the raw
+     * UID is printed in brackets, e.g.
+     * "(0002,0010) UI [1.2.840.10008.1.2.1]    #  20, 1 TransferSyntaxUID".
      */
     private static function parseMetaUID(string $dump, string $group, string $element): ?string
     {
         $pattern = sprintf(
-            '/^\s*\(%s,%s\)\s+UI\s+=([^#\r\n]*)/mi',
+            '/^\s*\(%s,%s\)\s+UI\s+\[([^\]\r\n]*)\]/mi',
             preg_quote($group, '/'),
             preg_quote($element, '/'),
         );
