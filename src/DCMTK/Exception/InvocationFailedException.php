@@ -5,7 +5,10 @@ declare(strict_types=1);
 
 namespace DCMTK\Exception;
 
-/** A DCMTK tool ran but exited non-zero. Carries the CommandResult for context. */
+/**
+ * A DCMTK tool invocation failed: either its process could not be started, or it
+ * ran and exited non-zero.
+ */
 class InvocationFailedException extends \RuntimeException implements ExceptionInterface
 {
 }
