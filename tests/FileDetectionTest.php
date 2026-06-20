@@ -5,7 +5,9 @@ declare(strict_types=1);
 
 namespace DICOM\Tests;
 
+use DCMTK\Toolkit;
 use DICOM\Exception\IOException;
+use DICOM\Exception\ToolkitException;
 use DICOM\File;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
@@ -52,5 +54,15 @@ final class FileDetectionTest extends TestCase
     {
         $this->expectException(IOException::class);
         File::isDICOM(__DIR__ . '/fixtures/does_not_exist.dcm');
+    }
+
+    public function testMissingToolkitSurfacesAsToolkitException(): void
+    {
+        // A toolkit pointed at a directory with no DCMTK binaries: the substrate
+        // raises BinaryNotFoundException, which File translates at its boundary so
+        // the public API only ever throws DICOM\Exception\ExceptionInterface.
+        $toolkit = new Toolkit(__DIR__ . '/fixtures');
+        $this->expectException(ToolkitException::class);
+        File::isDICOM(__DIR__ . '/fixtures/not_dicom.bin', $toolkit);
     }
 }

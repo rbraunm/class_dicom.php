@@ -5,9 +5,12 @@ declare(strict_types=1);
 
 namespace DICOM;
 
+use DCMTK\CommandResult;
+use DCMTK\Exception\ExceptionInterface as DCMTKException;
 use DCMTK\Toolkit;
 use DICOM\Exception\InvalidDICOMException;
 use DICOM\Exception\IOException;
+use DICOM\Exception\ToolkitException;
 
 /**
  * A DICOM file. Detection and file-meta reads are wrapped DCMTK invocations:
@@ -31,7 +34,7 @@ final class File
         self::assertReadable($path);
         $toolkit ??= new Toolkit();
 
-        return $toolkit->run('dcmftest', [$path])->succeeded();
+        return self::runTool($toolkit, 'dcmftest', [$path])->succeeded();
     }
 
     /**
@@ -66,7 +69,7 @@ final class File
         // +P search is intentionally not used: it does not cover the file-meta group,
         // so it returns nothing for 0002,xxxx. Bounding the read to the meta header
         // (e.g. +st) is a follow-up optimization.
-        $result = $this->toolkit->run('dcmdump', [
+        $result = self::runTool($this->toolkit, 'dcmdump', [
             '-q',
             '-M',
             '-Un',
@@ -89,6 +92,27 @@ final class File
         }
 
         return $value;
+    }
+
+    /**
+     * Run a DCMTK tool through the substrate, translating any substrate failure
+     * (a missing tool, or a process that could not start) into a DICOM-layer
+     * ToolkitException so callers of this API only ever catch
+     * `DICOM\Exception\ExceptionInterface`.
+     *
+     * @param list<string> $argv
+     */
+    private static function runTool(Toolkit $toolkit, string $tool, array $argv): CommandResult
+    {
+        try {
+            return $toolkit->run($tool, $argv);
+        } catch (DCMTKException $e) {
+            throw new ToolkitException(
+                sprintf("DICOM toolkit failed running '%s': %s", $tool, $e->getMessage()),
+                0,
+                $e,
+            );
+        }
     }
 
     /**
