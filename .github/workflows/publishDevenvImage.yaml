@@ -40,3 +40,25 @@ jobs:
           tags: |
             ghcr.io/rbraunm/class_dicom.php-devenv:latest
             ghcr.io/rbraunm/class_dicom.php-devenv:${{ github.sha }}
+
+  testToolchain:
+    name: Test suite against the new image
+    needs: publishImage
+    runs-on: ubuntu-latest
+    container:
+      image: ghcr.io/rbraunm/class_dicom.php-devenv:${{ github.sha }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Validate composer.json
+        run: composer validate --strict
+
+      - name: Install dependencies
+        run: composer install --no-interaction --no-progress
+
+      - name: Lint PHP sources
+        run: find src tests -name '*.php' -print0 | xargs -0 -r -n1 php -l
+
+      - name: Run tests
+        run: vendor/bin/phpunit

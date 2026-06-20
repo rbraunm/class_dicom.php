@@ -3,27 +3,37 @@ name: Validate and lint
 on:
   push:
     branches: [claude, main]
+    paths:
+      - src/**
+      - tests/**
+      - composer.json
+      - composer.lock
+      - phpunit.xml
+      - .github/workflows/validateAndLint.yaml
   pull_request:
     branches: [claude, main]
+    paths:
+      - src/**
+      - tests/**
+      - composer.json
+      - composer.lock
+      - phpunit.xml
+      - .github/workflows/validateAndLint.yaml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: read
 
 jobs:
   validate:
-    name: Validate and lint (PHP 8.5)
+    name: Validate, lint, and test (PHP 8.5 + DCMTK)
     runs-on: ubuntu-latest
     container:
-      image: php:8.5-cli
+      image: ghcr.io/rbraunm/class_dicom.php-devenv:latest
     steps:
-      - name: Install git
-        run: apt-get update && apt-get install -y --no-install-recommends git
-
       - name: Checkout
         uses: actions/checkout@v4
-
-      - name: Install Composer
-        run: |
-          php -r "copy('https://getcomposer.org/installer', 'composer-setup.php');"
-          php composer-setup.php --install-dir=/usr/local/bin --filename=composer
-          php -r "unlink('composer-setup.php');"
 
       - name: Validate composer.json
         run: composer validate --strict
@@ -33,3 +43,6 @@ jobs:
 
       - name: Lint PHP sources
         run: find src tests -name '*.php' -print0 | xargs -0 -r -n1 php -l
+
+      - name: Run tests
+        run: vendor/bin/phpunit
