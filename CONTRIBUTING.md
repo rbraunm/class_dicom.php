@@ -41,9 +41,17 @@ and this library fails loud.
   the error. (Error handling and retries for known transient failures are expected;
   a second strategy that silently takes over is not.) Validate invalid state at the
   earliest boundary -- ideally at construction, not at use.
-- **No dead code.** Refactor fully and delete superseded paths; do not comment them
-  out or keep them "just in case." There are no external consumers to preserve
-  backward compatibility for until v2 ships.
+- **No dead code -- but the interface is the deliverable.** Dead code means a path
+  that can never execute, or one added speculatively within the project; refactor
+  those out fully rather than commenting them or keeping them "just in case." It does
+  *not* mean public interface surface with no in-repo caller. This library's product
+  is the interface consuming applications link against, so intended public methods,
+  parameters, exceptions, and return shapes are legitimate even when nothing internal
+  calls them yet -- that surface is settled in the talk-first design pass, which makes
+  it intended rather than speculative. Reserve deletion for unreachable or
+  speculative-within-project paths. (No external consumers exist to preserve backward
+  compatibility for until v2 ships, so superseded *internal* paths still go
+  immediately.)
 - **Derive, don't duplicate.** Compute values from the canonical data at the call
   site rather than storing or transmitting derived state.
 

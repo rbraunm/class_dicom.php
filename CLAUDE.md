@@ -20,5 +20,10 @@ allowed; reading the legacy source is not.
 
 ## Working norms
 
+- **Dead code vs. interface surface.** "No dead code" targets unreachable or
+  speculative-within-project paths, not public API lacking an in-repo caller -- the
+  library's deliverable is its interface, so intended methods, parameters, exceptions,
+  and return shapes are legitimate with no internal caller. Detail in `CONTRIBUTING.md`
+  (Coding conventions).
 - Work on a branch; reach `main` only by pull request. One commit per logical checkpoint.
 - Run the suite in the pinned toolchain: `composer install && vendor/bin/phpunit`.
