@@ -63,4 +63,18 @@ final class FileMetaTest extends TestCase
             $this->assertInstanceOf(InvalidDICOMException::class, $caught);
         }
     }
+
+    public function testMetaReadOfAVanishedFileRaisesIOException(): void
+    {
+        // A File opened on valid DICOM whose backing file then disappears: the meta
+        // read's dcmdump fails, and the disambiguation routes it to IOException
+        // (the file is gone) rather than InvalidDICOMException.
+        $temp = tempnam(sys_get_temp_dir(), 'dcm');
+        copy(__DIR__ . '/fixtures/explicit_vr_le.dcm', $temp);
+        $file = File::open($temp);
+        unlink($temp);
+
+        $this->expectException(IOException::class);
+        $file->transferSyntaxUID();
+    }
 }

@@ -76,6 +76,11 @@ final class File
             $this->path,
         ]);
         if (!$result->succeeded()) {
+            // dcmftest passed at open(), so a dcmdump failure now is either the file
+            // having gone unreadable since (I/O) or a dataset malformed beyond the
+            // shallow Part 10 check (invalid DICOM). assertReadable throws
+            // IOException if the file is gone; otherwise it is malformed.
+            self::assertReadable($this->path);
             throw new InvalidDICOMException(sprintf(
                 "Reading %s from '%s' failed (dcmdump exit %d): %s",
                 $name,
