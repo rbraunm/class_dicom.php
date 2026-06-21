@@ -15,7 +15,16 @@ use DICOM\Exception\ToolkitException;
 /**
  * A DICOM file. Detection and file-meta reads are wrapped DCMTK invocations:
  * `dcmftest` for the Part 10 check, `dcmdump` (raw UIDs, single tag) for the
- * file-meta UIDs. Substrate failures surface as DICOM exceptions at this boundary.
+ * file-meta UIDs.
+ *
+ * Every public method throws only `DICOM\Exception\ExceptionInterface`, in one of
+ * three concrete forms:
+ * - IOException: the file is missing or unreadable (including if it vanishes
+ *   between open() and a later read).
+ * - InvalidDICOMException: the file reads but is not DICOM, or its file-meta
+ *   header is malformed or missing the requested UID.
+ * - ToolkitException: the backing DCMTK tool is missing or could not be started
+ *   (a substrate failure translated at this boundary).
  */
 final class File
 {
@@ -27,7 +36,10 @@ final class File
 
     /**
      * True if $path is a DICOM Part 10 file. A readable non-DICOM file returns
-     * false; a missing or unreadable file raises IOException.
+     * false.
+     *
+     * @throws IOException the file is missing or unreadable
+     * @throws ToolkitException dcmftest is missing or could not be started
      */
     public static function isDICOM(string $path, ?Toolkit $toolkit = null): bool
     {
@@ -38,8 +50,11 @@ final class File
     }
 
     /**
-     * Open a DICOM file for metadata access. Raises IOException if the file
-     * cannot be read, InvalidDICOMException if it reads but is not DICOM.
+     * Open a DICOM file for metadata access.
+     *
+     * @throws IOException the file is missing or unreadable
+     * @throws InvalidDICOMException the file reads but is not DICOM
+     * @throws ToolkitException dcmftest is missing or could not be started
      */
     public static function open(string $path, ?Toolkit $toolkit = null): self
     {
@@ -51,13 +66,25 @@ final class File
         return new self($path, $toolkit);
     }
 
-    /** TransferSyntaxUID (0002,0010) from the file meta header. */
+    /**
+     * TransferSyntaxUID (0002,0010) from the file meta header.
+     *
+     * @throws IOException the file vanished or became unreadable since open()
+     * @throws InvalidDICOMException the meta header is malformed or the UID is absent
+     * @throws ToolkitException dcmdump is missing or could not be started
+     */
     public function transferSyntaxUID(): string
     {
         return $this->requireMetaUID('0002', '0010', 'TransferSyntaxUID');
     }
 
-    /** MediaStorageSOPClassUID (0002,0002) from the file meta header. */
+    /**
+     * MediaStorageSOPClassUID (0002,0002) from the file meta header.
+     *
+     * @throws IOException the file vanished or became unreadable since open()
+     * @throws InvalidDICOMException the meta header is malformed or the UID is absent
+     * @throws ToolkitException dcmdump is missing or could not be started
+     */
     public function mediaStorageSOPClassUID(): string
     {
         return $this->requireMetaUID('0002', '0002', 'MediaStorageSOPClassUID');
