@@ -50,12 +50,43 @@ def build(transfer_syntax):
     return ds
 
 
+def build_tags_sample():
+    """A dataset exercising the Phase 2 tag-read parse paths: a bracketed string
+    (PatientName), a multi-valued string (ImageType -> [ORIGINAL\\PRIMARY]), a
+    bare numeric (Rows), an empty type-2 value (AccessionNumber), and a 16 KB
+    binary (ICCProfile) that exceeds the default +R 4 limit and so is reported as
+    "(not loaded)"."""
+    sop_instance = generate_uid()
+    fm = FileMetaDataset()
+    fm.MediaStorageSOPClassUID = SC_SOP_CLASS
+    fm.MediaStorageSOPInstanceUID = sop_instance
+    fm.TransferSyntaxUID = ExplicitVRLittleEndian
+    fm.ImplementationClassUID = generate_uid()
+
+    ds = Dataset()
+    ds.file_meta = fm
+    ds.SOPClassUID = SC_SOP_CLASS
+    ds.SOPInstanceUID = sop_instance
+    ds.PatientName = "DOE^JANE"
+    ds.PatientID = "TAG1"
+    ds.AccessionNumber = ""
+    ds.ImageType = ["ORIGINAL", "PRIMARY"]
+    ds.Rows = 512
+    ds.Columns = 512
+    ds.BitsAllocated = 8
+    ds.ICCProfile = b"\x00" * 16384
+    return ds
+
+
 def main():
     FIXTURES.mkdir(exist_ok=True)
     for name, ts in CASES.items():
         ds = build(ts)
         dcmwrite(FIXTURES / name, ds, enforce_file_format=True)
         print(f"wrote {name}  ->  {ts} ({ts.name})")
+
+    dcmwrite(FIXTURES / "tags_sample.dcm", build_tags_sample(), enforce_file_format=True)
+    print("wrote tags_sample.dcm")
 
     # A deliberately non-DICOM file (no preamble/DICM) for the false/throw paths.
     (FIXTURES / "not_dicom.bin").write_bytes(b"this is not a DICOM file\n" * 8)
