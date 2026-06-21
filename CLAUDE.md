@@ -44,6 +44,13 @@ suite; the sandbox is for development iteration.
 Run as root on Ubuntu:
 
 ```bash
+# 0. Sandbox image quirk: a stray nodesource apt source ships in the base image
+#    and is not on the egress allowlist, so `apt-get update` fails closed with a
+#    403 before it reaches our repos. Disable it if present (idempotent).
+if [ -f /etc/apt/sources.list.d/nodesource.sources ]; then
+  mv /etc/apt/sources.list.d/nodesource.sources /etc/apt/sources.list.d/nodesource.sources.disabled
+fi
+
 # 1. PHP 8.5 + extensions -- signing key fetched over HTTPS from the keyserver
 KEYID=14AA40EC0831756756D7F66C4F4EA0AAE5267A6C
 install -d -m 0755 /usr/share/keyrings
