@@ -93,6 +93,25 @@ suite-running environment:
 
 See `tools/README.md` for the full tooling reference.
 
+### Agent sandbox (allowlisted egress)
+
+An LLM agent without a container runtime installs the toolchain directly rather
+than using the image or LXC above -- see `CLAUDE.md`, "Toolchain setup in a
+sandboxed agent environment". If the sandbox restricts outbound traffic to an
+allowlist, every host that setup and the test run touch must be whitelisted, or
+the install fails closed (`host_not_allowed`):
+
+| Host | Used for |
+|------|----------|
+| `keyserver.ubuntu.com` | PHP signing key (HTTPS) |
+| `ppa.launchpadcontent.net` | PHP 8.5 + extensions (ondrej PPA) |
+| `archive.ubuntu.com`, `security.ubuntu.com` | DCMTK, Python, base packages |
+| `pypi.org`, `files.pythonhosted.org` | pydicom / pynetdicom (pip) |
+| `getcomposer.org` | Composer installer |
+| `composer.github.io` | Composer installer signature |
+| `repo.packagist.org`, `packagist.org` | `composer install` (PHPUnit, psr/log) |
+| `github.com`, `codeload.github.com`, `api.github.com` | Composer dist downloads, git |
+
 ## Continuous integration
 
 Two path-filtered GitHub Actions workflows, each also runnable on demand
