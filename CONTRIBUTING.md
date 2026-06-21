@@ -103,6 +103,25 @@ The devenv image is public, so pulls are anonymous; pushing it stays authenticat
 and authorized. Steady state is automatic: a code push tests against the published
 toolchain, and a toolchain push rebuilds and re-tests.
 
+## Logging and PHI
+
+DICOM file paths and tool output can contain PHI, so the library is deliberate
+about what it emits:
+
+- The optional PSR-3 logger (injected into `Toolkit`) records each completed
+  invocation at debug level with only the tool, exit code, and duration -- never
+  the arguments, which are file paths.
+- The library logs nothing on its own; logging is opt-in via that logger.
+
+Exception messages are the one place this does not hold: to stay useful for
+debugging, they include the file path and, in some cases, the underlying tool's
+stderr. The library never logs these itself, but a consumer that does
+`log($exception)` will write whatever the message contains. If you handle PHI,
+account for that in your own logging -- scrub, or log exception types and codes
+rather than raw messages.
+
+(When the README is rewritten for v2, this note belongs there too, for consumers.)
+
 ## Branch workflow
 
 Development happens on a working branch (agent sessions use `claude`); changes reach
