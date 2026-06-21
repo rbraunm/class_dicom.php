@@ -5,7 +5,8 @@
     "license": "Apache-2.0",
     "keywords": ["dicom", "dcmtk", "pacs", "medical-imaging", "dicom-networking"],
     "require": {
-        "php": ">=8.5"
+        "php": ">=8.5",
+        "psr/log": "^3.0"
     },
     "require-dev": {
         "phpunit/phpunit": "^11.5 || ^12.0"

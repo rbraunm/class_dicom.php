@@ -7,6 +7,8 @@ namespace DICOM\Tests;
 
 use DCMTK\Toolkit;
 use PHPUnit\Framework\TestCase;
+use Psr\Log\AbstractLogger;
+use Psr\Log\LogLevel;
 
 final class ToolkitTest extends TestCase
 {
@@ -16,5 +18,32 @@ final class ToolkitTest extends TestCase
 
         $this->assertNotSame('', $version);
         $this->assertStringContainsStringIgnoringCase('dcmtk', $version);
+    }
+
+    public function testRunLogsCompletionAtDebugWithDuration(): void
+    {
+        $logger = new class extends AbstractLogger {
+            /** @var list<array{level: mixed, message: string, context: array<string, mixed>}> */
+            public array $records = [];
+
+            public function log($level, string|\Stringable $message, array $context = []): void
+            {
+                $this->records[] = [
+                    'level' => $level,
+                    'message' => (string) $message,
+                    'context' => $context,
+                ];
+            }
+        };
+
+        (new Toolkit(null, $logger))->run('dcmdump', ['--version']);
+
+        $this->assertCount(1, $logger->records);
+        $record = $logger->records[0];
+        $this->assertSame(LogLevel::DEBUG, $record['level']);
+        $this->assertSame('dcmdump', $record['context']['tool']);
+        $this->assertSame(0, $record['context']['exitCode']);
+        $this->assertArrayHasKey('durationSeconds', $record['context']);
+        $this->assertIsFloat($record['context']['durationSeconds']);
     }
 }

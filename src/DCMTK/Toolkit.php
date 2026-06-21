@@ -8,6 +8,7 @@ namespace DCMTK;
 use DCMTK\Exception\BinaryNotFoundException;
 use DCMTK\Exception\InvocationFailedException;
 use DCMTK\Exception\UnexpectedOutputException;
+use Psr\Log\LoggerInterface;
 
 /**
  * The substrate every DICOM/PACS wrapper runs through: it locates DCMTK tools,
@@ -23,9 +24,13 @@ final class Toolkit
     /**
      * @param string|null $toolkitDirectory explicit directory holding the DCMTK
      *   binaries; when null, tools are resolved from PATH.
+     * @param LoggerInterface|null $logger optional PSR-3 logger; when set, each
+     *   completed invocation is logged at debug with the tool, exit code, and
+     *   duration -- never the arguments, which can contain PHI in file paths.
      */
     public function __construct(
         private readonly ?string $toolkitDirectory = null,
+        private readonly ?LoggerInterface $logger = null,
     ) {
     }
 
@@ -79,6 +84,14 @@ final class Toolkit
         fclose($pipes[2]);
         $exitCode = proc_close($process);
         $durationSeconds = microtime(true) - $startedAt;
+
+        // Debug-level only, and deliberately without argv: DICOM arguments are file
+        // paths that can embed PHI, which must not reach logs.
+        $this->logger?->debug('{tool} completed', [
+            'tool' => $tool,
+            'exitCode' => $exitCode,
+            'durationSeconds' => round($durationSeconds, 4),
+        ]);
 
         return new CommandResult(
             $binary,
