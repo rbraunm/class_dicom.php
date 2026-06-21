@@ -151,11 +151,11 @@ $result = $n->echoscu('192.168.1.100', 104, 'MY_AE', 'REMOTE_AE');
 $n->file = '/path/to/image.dcm';
 $n->send_dcm('192.168.1.100', 104, 'MY_AE', 'REMOTE_AE');
 
-// C-STORE send (batch — all files in the same directory)
+// C-STORE send (batch -- all files in the same directory)
 $n->file = '/path/to/image.dcm';
 $n->send_dcm('192.168.1.100', 104, 'MY_AE', 'REMOTE_AE', 1);
 
-// C-STORE receive (blocking — starts a DICOM listener)
+// C-STORE receive (blocking -- starts a DICOM listener)
 $n->store_server(
     11112,                              // port
     '/var/dicom/incoming',              // storage directory
@@ -240,6 +240,14 @@ The `examples/` directory contains working scripts for common operations:
 | `store_server_handler.php` | Handler script called after each received file |
 | `store_server_config.cfg` | Configuration for the receive server |
 
+## Acknowledgments
+
+This library wraps [DCMTK](https://dicom.offis.de/dcmtk.php.en), the DICOM Toolkit developed and maintained by [OFFIS e.V.](https://www.offis.de/en/), a non-profit research institute in Oldenburg, Germany. DCMTK is distributed under a 3-clause BSD license that permits this use freely; it is credited and linked here as a matter of attribution and courtesy, not obligation. DCMTK is a runtime dependency you install separately -- this library invokes its command-line tools and does not bundle or redistribute them.
+
 ## License
 
-MIT
+Apache-2.0. See [LICENSE](LICENSE) and [NOTICE](NOTICE).
+
+---
+
+Supported in part by the work of [OneSourceIT](https://onesourceit.us/open-source.html).

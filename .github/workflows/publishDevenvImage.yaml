@@ -1,0 +1,67 @@
+name: Publish devenv image
+
+on:
+  push:
+    branches: [main, claude]
+    paths:
+      - tools/devenv/provision.sh
+      - tools/devenv/docker/Dockerfile
+      - .github/workflows/publishDevenvImage.yaml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: read
+
+jobs:
+  publishImage:
+    name: Build and publish devenv image
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push
+        uses: docker/build-push-action@v6
+        with:
+          context: tools/devenv
+          file: tools/devenv/docker/Dockerfile
+          push: true
+          tags: |
+            ghcr.io/rbraunm/class_dicom.php-devenv:latest
+            ghcr.io/rbraunm/class_dicom.php-devenv:${{ github.sha }}
+
+  testToolchain:
+    name: Test suite against the new image
+    needs: publishImage
+    runs-on: ubuntu-latest
+    container:
+      image: ghcr.io/rbraunm/class_dicom.php-devenv:${{ github.sha }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Validate composer.json
+        run: composer validate --strict
+
+      - name: Install dependencies
+        run: composer install --no-interaction --no-progress
+
+      - name: Lint PHP sources
+        run: find src tests -name '*.php' -print0 | xargs -0 -r -n1 php -l
+
+      - name: Run tests
+        run: vendor/bin/phpunit

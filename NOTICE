@@ -1,0 +1,11 @@
+class_dicom
+Copyright 2026 Randy Braunm
+
+This product is licensed under the Apache License, Version 2.0 (see LICENSE).
+
+The version 2 implementation is an independent, clean-room reimplementation
+written solely from the DICOM standard (NEMA PS3) and public documentation.
+It shares no source code, internal structure, or text with any prior work.
+
+The original class_dicom.php library by Dean Vaughan is acknowledged as a
+conceptual predecessor only. No code from that work is incorporated here.

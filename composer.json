@@ -2,18 +2,34 @@
     "name": "rbraunm/class_dicom",
     "description": "PHP library for DICOM tag handling, image conversion, compression, and networking via DCMTK",
     "type": "library",
-    "require": {
-        "php": ">=8.0"
-    },
-    "license": "MIT",
+    "license": "Apache-2.0",
     "keywords": ["dicom", "dcmtk", "pacs", "medical-imaging", "dicom-networking"],
+    "require": {
+        "php": ">=8.5",
+        "psr/log": "^3.0"
+    },
+    "require-dev": {
+        "phpunit/phpunit": "^11.5 || ^12.0"
+    },
+    "autoload": {
+        "psr-4": {
+            "DICOM\\": "src/DICOM/",
+            "PACS\\": "src/PACS/",
+            "DCMTK\\": "src/DCMTK/"
+        }
+    },
+    "autoload-dev": {
+        "psr-4": {
+            "DICOM\\Tests\\": "tests/"
+        }
+    },
+    "scripts": {
+        "test": "phpunit"
+    },
     "authors": [
-		{
-            "name": "Randy Braunm",
-            "email": "randy.braunm@gmail.com"
-        },
         {
-            "name": "Dean Vaughan"
+            "name": "Randy Braunm",
+            "email": "randy@unseencolor.com"
         }
     ],
     "minimum-stability": "stable"
