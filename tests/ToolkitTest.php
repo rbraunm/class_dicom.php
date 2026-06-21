@@ -5,6 +5,8 @@ declare(strict_types=1);
 
 namespace DICOM\Tests;
 
+use DCMTK\Exception\InvocationFailedException;
+use DCMTK\Exception\UnexpectedOutputException;
 use DCMTK\Toolkit;
 use PHPUnit\Framework\TestCase;
 use Psr\Log\AbstractLogger;
@@ -18,6 +20,34 @@ final class ToolkitTest extends TestCase
 
         $this->assertNotSame('', $version);
         $this->assertStringContainsStringIgnoringCase('dcmtk', $version);
+    }
+
+    public function testVersionThrowsInvocationFailedOnNonZeroExit(): void
+    {
+        // `false` exits non-zero regardless of arguments, so version() sees a
+        // failed invocation rather than a version line.
+        $this->expectException(InvocationFailedException::class);
+        (new Toolkit())->version('false');
+    }
+
+    public function testVersionThrowsUnexpectedOutputOnEmptyVersionLine(): void
+    {
+        // A tool that exits 0 with no stdout: version() succeeds but has nothing
+        // to parse, so it must raise rather than return an empty string.
+        $dir = sys_get_temp_dir() . '/dcmtk-test-' . uniqid();
+        mkdir($dir);
+        $tool = 'quietzero';
+        file_put_contents("{$dir}/{$tool}", "#!/bin/sh\nexit 0\n");
+        chmod("{$dir}/{$tool}", 0o755);
+        try {
+            (new Toolkit($dir))->version($tool);
+            $this->fail('expected UnexpectedOutputException');
+        } catch (UnexpectedOutputException $caught) {
+            $this->assertStringContainsString($tool, $caught->getMessage());
+        } finally {
+            unlink("{$dir}/{$tool}");
+            rmdir($dir);
+        }
     }
 
     public function testRunLogsCompletionAtDebugWithDuration(): void
