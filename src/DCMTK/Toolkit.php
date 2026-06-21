@@ -98,7 +98,19 @@ final class Toolkit
             }
             foreach ($readable as $stream) {
                 $chunk = fread($stream, 8192);
-                if (is_string($chunk) && $chunk !== '') {
+                if ($chunk === false) {
+                    // A read error on the pipe -- distinct from '', which is EOF or
+                    // no-data-yet. Fail loud rather than treat it as a clean end:
+                    // the captured output can no longer be trusted. Reap first.
+                    foreach ($openPipes as $openPipe) {
+                        fclose($openPipe);
+                    }
+                    proc_close($process);
+                    throw new InvocationFailedException(
+                        "Failed reading output from '{$binary}'.",
+                    );
+                }
+                if ($chunk !== '') {
                     if ($stream === $pipes[1]) {
                         $stdout .= $chunk;
                     } else {
