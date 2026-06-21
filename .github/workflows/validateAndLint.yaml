@@ -11,14 +11,10 @@ on:
       - phpunit.xml
       - .github/workflows/validateAndLint.yaml
   pull_request:
+    # No paths filter here: on a long-lived PR branch GitHub evaluates paths
+    # against the cumulative PR diff, which always contains src/tests, so a filter
+    # would never skip. The push trigger above is where path filtering takes effect.
     branches: [claude, main]
-    paths:
-      - src/**
-      - tests/**
-      - composer.json
-      - composer.lock
-      - phpunit.xml
-      - .github/workflows/validateAndLint.yaml
   workflow_dispatch:
 
 permissions:
