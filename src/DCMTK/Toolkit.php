@@ -58,9 +58,9 @@ final class Toolkit
      * Run a DCMTK tool and return the result. The tool is invoked directly (no
      * shell), so arguments need no escaping. Throws only when the tool is missing
      * or the process cannot be started; a non-zero exit is returned in the result
-     * for the caller to interpret. Assumes bounded tool output (true for the
-     * wrapped DCMTK tools); if a future tool can flood a pipe, this read loop
-     * should move to stream_select.
+     * for the caller to interpret. stdout and stderr are drained concurrently
+     * (non-blocking + stream_select) so a tool that fills one pipe while output is
+     * pending on the other cannot deadlock.
      *
      * @param list<string> $argv
      */
@@ -78,10 +78,42 @@ final class Toolkit
             throw new InvocationFailedException("Could not start '{$binary}'.");
         }
         fclose($pipes[0]);
-        $stdout = stream_get_contents($pipes[1]);
-        $stderr = stream_get_contents($pipes[2]);
-        fclose($pipes[1]);
-        fclose($pipes[2]);
+
+        // Drain stdout and stderr concurrently: both pipes non-blocking, read
+        // whichever is ready until each reaches EOF, so a tool that fills one
+        // pipe's buffer while output is pending on the other cannot deadlock.
+        stream_set_blocking($pipes[1], false);
+        stream_set_blocking($pipes[2], false);
+        $stdout = '';
+        $stderr = '';
+        $openPipes = [1 => $pipes[1], 2 => $pipes[2]];
+        while ($openPipes !== []) {
+            $readable = array_values($openPipes);
+            $writable = null;
+            $except = null;
+            // @ suppresses the benign warning stream_select emits when interrupted
+            // by a signal; the false return is handled explicitly below.
+            if (@stream_select($readable, $writable, $except, null) === false) {
+                break;
+            }
+            foreach ($readable as $stream) {
+                $chunk = fread($stream, 8192);
+                if (is_string($chunk) && $chunk !== '') {
+                    if ($stream === $pipes[1]) {
+                        $stdout .= $chunk;
+                    } else {
+                        $stderr .= $chunk;
+                    }
+                }
+                if (feof($stream)) {
+                    fclose($stream);
+                    unset($openPipes[$stream === $pipes[1] ? 1 : 2]);
+                }
+            }
+        }
+        foreach ($openPipes as $stream) {
+            fclose($stream);
+        }
         $exitCode = proc_close($process);
         $durationSeconds = microtime(true) - $startedAt;
 
@@ -97,8 +129,8 @@ final class Toolkit
             $binary,
             $argv,
             $exitCode,
-            $stdout === false ? '' : $stdout,
-            $stderr === false ? '' : $stderr,
+            $stdout,
+            $stderr,
             $durationSeconds,
         );
     }

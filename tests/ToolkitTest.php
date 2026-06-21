@@ -46,4 +46,15 @@ final class ToolkitTest extends TestCase
         $this->assertArrayHasKey('durationSeconds', $record['context']);
         $this->assertIsFloat($record['context']['durationSeconds']);
     }
+
+    public function testRunReturnsNonZeroExitAndCapturesStderr(): void
+    {
+        // dcmdump on a missing file: run() returns the non-zero result rather than
+        // throwing, and the error text is captured from the stderr pipe (exercises
+        // the concurrent drain on stderr).
+        $result = (new Toolkit())->run('dcmdump', [__DIR__ . '/fixtures/does_not_exist.dcm']);
+
+        $this->assertNotSame(0, $result->exitCode);
+        $this->assertNotSame('', $result->stderr);
+    }
 }
