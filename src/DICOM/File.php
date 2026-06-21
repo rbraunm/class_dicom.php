@@ -203,9 +203,10 @@ final class File
     /**
      * Run dcmdump once and cache its parsed output. -q quiet, -Un raw bracketed
      * UIDs (not name-mapped), -M skip values longer than +R so large binaries
-     * (e.g. pixel data) are not loaded, +R the configured limit in kbytes. dcmdump
-     * still reports a skipped value's byte length in its line comment, which feeds
-     * ValueExceedsReadLimitException.
+     * (e.g. pixel data) are not loaded, +L print loaded values completely (dcmdump
+     * otherwise truncates long values in the display regardless of +R), +R the
+     * configured limit in kbytes. dcmdump reports a skipped value's byte length in
+     * its line comment, which feeds ValueExceedsReadLimitException.
      */
     private function ensureTagsLoaded(): void
     {
@@ -216,6 +217,7 @@ final class File
             '-q',
             '-Un',
             '-M',
+            '+L',
             '+R',
             (string) $this->maxReadLengthKB,
             $this->path,
@@ -238,19 +240,16 @@ final class File
     }
 
     /**
-     * Parse `dcmdump -Un -M` output into top-level tag maps. Each element prints as
-     * "(gggg,eeee) VR <value>  # <length>, <vm> <Keyword>"; sequence items are
+     * Parse `dcmdump -Un -M +L` output into top-level tag maps. Each element prints
+     * as "(gggg,eeee) VR <value>  # <length>, <vm> <Keyword>"; sequence items are
      * indented, so anchoring to the start of the line keeps only top-level
-     * elements. The byte length comes from the trailing comment and is retained for
-     * values that are not available as a complete string: either skipped by -M
-     * ("(not loaded)") or display-truncated by dcmdump (a bracketed value whose
-     * closing "]" is gone, or a non-string value carrying dcmdump's "..." marker).
-     * Such values are never returned partially; they go to the not-loaded map and
-     * read as ValueExceedsReadLimitException. A zero-length value is the empty
-     * string regardless of how dcmdump renders it.
+     * elements. +L makes dcmdump print loaded values in full, so a value is either
+     * complete or "(not loaded)" (skipped by -M because it exceeds +R), whose byte
+     * length is kept from the comment for ValueExceedsReadLimitException. A
+     * zero-length value is the empty string regardless of how dcmdump renders it.
      *
      * @return array{0: array<string, string>, 1: array<string, int>} loaded values,
-     *   then byte lengths of values that are present but not available as a string
+     *   then byte lengths of values skipped by -M
      */
     private static function parseDump(string $dump): array
     {
@@ -270,19 +269,8 @@ final class File
             } elseif ($length === 0) {
                 // Present but empty (type-2), however dcmdump renders zero length.
                 $values[$key] = '';
-            } elseif ($value !== '' && $value[0] === '[') {
-                if (str_ends_with($value, ']')) {
-                    $values[$key] = substr($value, 1, -1);
-                } else {
-                    // dcmdump truncated a long string value (its closing bracket is
-                    // gone). A partial value would be a silently wrong answer, so it
-                    // is treated as not available, the same as a value skipped by -M.
-                    $notLoaded[$key] = $length;
-                }
-            } elseif (str_contains($value, '...')) {
-                // dcmdump truncated a long non-string value (its "..." marker). Same
-                // handling: not available rather than a silently partial value.
-                $notLoaded[$key] = $length;
+            } elseif ($value !== '' && $value[0] === '[' && str_ends_with($value, ']')) {
+                $values[$key] = substr($value, 1, -1);
             } else {
                 $values[$key] = $value;
             }

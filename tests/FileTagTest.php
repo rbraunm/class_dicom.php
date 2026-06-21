@@ -71,21 +71,16 @@ final class FileTagTest extends TestCase
         }
     }
 
-    public function testOversizeValueIsNeverReturnedTruncated(): void
+    public function testRaisingTheLimitLoadsTheValueInFull(): void
     {
-        // Opened above the value's size, dcmdump may print it in full or may
-        // display-truncate it. Either is acceptable -- a complete value, or no
-        // value (ValueExceedsReadLimitException). What is never acceptable is a
-        // silently partial value, so the one thing asserted is the absence of
-        // dcmdump's "..." truncation marker in any returned string.
-        try {
-            $value = File::open($this->sample(), maxReadLengthKB: 64)->tag(0x0028, 0x2000);
-            $this->assertNotNull($value);
-            $this->assertStringNotContainsString('...', $value);
-        } catch (ValueExceedsReadLimitException) {
-            // Acceptable: treated as not available rather than returned partially.
-            $this->addToAssertionCount(1);
-        }
+        // +R 64 lifts the limit above the 16 KB ICCProfile so it loads, and +L
+        // makes dcmdump print it completely. The fixture's value is 16384 zero
+        // bytes, rendered as backslash-separated "00" octets, so a complete read
+        // contains exactly one "00" per byte and no truncation marker.
+        $value = File::open($this->sample(), maxReadLengthKB: 64)->tag(0x0028, 0x2000);
+        $this->assertNotNull($value);
+        $this->assertStringNotContainsString('...', $value);
+        $this->assertSame(16384, substr_count($value, '00'));
     }
 
     public function testTagsListsTopLevelTagsWithNotAvailableAsNull(): void
