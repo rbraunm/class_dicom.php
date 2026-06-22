@@ -107,6 +107,9 @@ final class Convert
      * (SOPInstanceUID and friends), so the result is well-formed without a template.
      *
      * @param list<string> $images one or more source image paths, in frame order
+     * @param SopClass|null $sopClass target SOP class; defaults to single-frame Secondary Capture
+     * @param StudySeriesSource|null $studySeries where to file the result in the
+     *   Patient/Study/Series tree; defaults to fresh study and series UIDs
      *
      * @throws \InvalidArgumentException the image list is empty, an entry is not a
      *   non-empty path, or multiple images were given with a single-frame SOP class
@@ -119,6 +122,7 @@ final class Convert
         array $images,
         string $outputPath,
         ?SopClass $sopClass = null,
+        ?StudySeriesSource $studySeries = null,
         ?Toolkit $toolkit = null,
     ): File {
         if ($images === []) {
@@ -135,9 +139,10 @@ final class Convert
                 'Multiple images require a multiframe-capable SOP class; pass SopClass::newSC().'
             );
         }
+        $studySeries ??= StudySeriesSource::generate();
         $toolkit ??= new Toolkit();
         // img2dcm: [options] imgfile-in... dcmfile-out
-        $argv = array_merge($sopClass->flags(), $images, [$outputPath]);
+        $argv = array_merge($sopClass->flags(), $studySeries->flags(), $images, [$outputPath]);
         $result = Tool::run($toolkit, 'img2dcm', $argv);
         if (!$result->succeeded()) {
             foreach ($images as $image) {

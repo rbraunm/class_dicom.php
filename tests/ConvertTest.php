@@ -10,6 +10,7 @@ use DICOM\Exception\ConversionException;
 use DICOM\File;
 use DICOM\Scale;
 use DICOM\SopClass;
+use DICOM\StudySeriesSource;
 use DICOM\Tag;
 use DICOM\Windowing;
 use PHPUnit\Framework\TestCase;
@@ -226,5 +227,53 @@ final class ConvertTest extends TestCase
 
         $this->expectException(ConversionException::class);
         Convert::fromJpeg([$big, $small], $this->outPath(), SopClass::newSC());
+    }
+
+    private function studyUid(File $file): ?string
+    {
+        return $file->dataset()->get(0x0020, 0x000D);
+    }
+
+    private function seriesUid(File $file): ?string
+    {
+        return $file->dataset()->get(0x0020, 0x000E);
+    }
+
+    public function testFromJpegGeneratesFreshStudyAndSeriesByDefault(): void
+    {
+        [$a] = $this->jpegFrames(1);
+        [$b] = $this->jpegFrames(1);
+        $first = Convert::fromJpeg([$a], $this->outPath());
+        $second = Convert::fromJpeg([$b], $this->outPath());
+        $this->assertNotSame($this->studyUid($first), $this->studyUid($second));
+        $this->assertNotSame($this->seriesUid($first), $this->seriesUid($second));
+    }
+
+    public function testFromJpegStudyFromInheritsStudyButNotSeries(): void
+    {
+        [$refJpg] = $this->jpegFrames(1);
+        $reference = Convert::fromJpeg([$refJpg], $this->outPath());
+        [$jpg] = $this->jpegFrames(1);
+        $derived = Convert::fromJpeg(
+            [$jpg],
+            $this->outPath(),
+            studySeries: StudySeriesSource::studyFrom($reference),
+        );
+        $this->assertSame($this->studyUid($reference), $this->studyUid($derived));
+        $this->assertNotSame($this->seriesUid($reference), $this->seriesUid($derived));
+    }
+
+    public function testFromJpegSeriesFromInheritsStudyAndSeries(): void
+    {
+        [$refJpg] = $this->jpegFrames(1);
+        $reference = Convert::fromJpeg([$refJpg], $this->outPath());
+        [$jpg] = $this->jpegFrames(1);
+        $derived = Convert::fromJpeg(
+            [$jpg],
+            $this->outPath(),
+            studySeries: StudySeriesSource::seriesFrom($reference),
+        );
+        $this->assertSame($this->studyUid($reference), $this->studyUid($derived));
+        $this->assertSame($this->seriesUid($reference), $this->seriesUid($derived));
     }
 }
