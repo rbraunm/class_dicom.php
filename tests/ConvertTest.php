@@ -8,6 +8,7 @@ namespace DICOM\Tests;
 use DICOM\Convert;
 use DICOM\Exception\InvalidDICOMException;
 use DICOM\File;
+use DICOM\Scale;
 use DICOM\Windowing;
 use PHPUnit\Framework\TestCase;
 
@@ -109,5 +110,46 @@ final class ConvertTest extends TestCase
         $before = getcwd();
         (new Convert($this->image()))->toJPEG($this->outPath());
         $this->assertSame($before, getcwd());
+    }
+
+    public function testThumbnailIsScaledTo125pxByDefault(): void
+    {
+        $out = $this->outPath();
+        (new Convert($this->image()))->toThumbnail($out);
+        $this->assertIsJpeg($out);
+        $this->assertSame(125, getimagesize($out)[0]);
+    }
+
+    public function testThumbnailHonorsCustomWidth(): void
+    {
+        $out = $this->outPath();
+        (new Convert($this->image()))->toThumbnail($out, widthPixels: 80);
+        $this->assertSame(80, getimagesize($out)[0]);
+    }
+
+    public function testToJpegScalesWidthToRequestedPixels(): void
+    {
+        $out = $this->outPath();
+        (new Convert($this->image()))->toJPEG($out, scale: Scale::widthTo(64));
+        $this->assertSame(64, getimagesize($out)[0]);
+    }
+
+    public function testByFactorScalingRenders(): void
+    {
+        $out = $this->outPath();
+        (new Convert($this->image()))->toJPEG($out, scale: Scale::byFactor(0.5));
+        $this->assertIsJpeg($out);
+    }
+
+    public function testScaleWidthBelowOneThrows(): void
+    {
+        $this->expectException(\InvalidArgumentException::class);
+        Scale::widthTo(0);
+    }
+
+    public function testScaleByFactorNotPositiveThrows(): void
+    {
+        $this->expectException(\InvalidArgumentException::class);
+        Scale::byFactor(0.0);
     }
 }
