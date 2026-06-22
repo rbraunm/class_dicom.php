@@ -94,6 +94,68 @@ final class Convert
     }
 
     /**
+     * Render every frame of the (possibly multiframe) image to a sequence of
+     * baseline JPEG files via dcmj2pnm, returning the created paths in frame order.
+     *
+     * Each frame is written to "{outputPathPrefix}.{index}.jpg" (zero-based) -- the
+     * naming dcmj2pnm produces under all-frames extraction. A single-frame object
+     * yields one file, "{outputPathPrefix}.0.jpg". Windowing, scaling, and quality
+     * behave as in toJPEG and apply uniformly to every frame. Turning the frames
+     * into a video is deliberately out of scope: that is an ffmpeg job with no
+     * DCMTK equivalent, left to the caller.
+     *
+     * @return list<string> the created frame file paths, in frame order
+     *
+     * @throws \InvalidArgumentException quality is outside [0, 100]
+     * @throws \DICOM\Exception\IOException the source vanished or became unreadable
+     * @throws ConversionException a frame could not be rendered, or an expected
+     *   frame file was not produced
+     * @throws \DICOM\Exception\ToolkitException dcmj2pnm is missing or could not be started
+     */
+    public function toJpegFrames(
+        string $outputPathPrefix,
+        ?Windowing $windowing = null,
+        int $quality = 100,
+        ?Scale $scale = null,
+    ): array {
+        if ($quality < 0 || $quality > 100) {
+            throw new \InvalidArgumentException("JPEG quality must be within [0, 100], got {$quality}.");
+        }
+        $windowing ??= Windowing::useWindow(1);
+        $scale ??= Scale::none();
+        $argv = array_merge(
+            ['+oj', '+Jq', (string) $quality, '+Fa'],
+            $windowing->flags(),
+            $scale->flags(),
+            [$this->source->path(), $outputPathPrefix],
+        );
+        $result = Tool::run($this->toolkit, 'dcmj2pnm', $argv);
+        if (!$result->succeeded()) {
+            Tool::assertReadable($this->source->path());
+            throw new ConversionException(sprintf(
+                "Extracting frames from '%s' failed (dcmj2pnm exit %d): %s",
+                $this->source->path(),
+                $result->exitCode,
+                trim($result->stderr),
+            ));
+        }
+        // NumberOfFrames is absent on a single-frame object, which yields one file.
+        $frameCount = $this->source->getInteger(Tag::NumberOfFrames) ?? 1;
+        $paths = [];
+        for ($index = 0; $index < $frameCount; $index++) {
+            $path = sprintf('%s.%d.jpg', $outputPathPrefix, $index);
+            if (!is_file($path)) {
+                throw new ConversionException(
+                    "dcmj2pnm reported success but expected frame file '{$path}' is missing."
+                );
+            }
+            $paths[] = $path;
+        }
+
+        return $paths;
+    }
+
+    /**
      * Create a DICOM Secondary Capture file from one or more JPEG images via
      * img2dcm, returning the opened result so attributes can be stamped on it with
      * the File tag accessors.

@@ -336,4 +336,60 @@ final class ConvertTest extends TestCase
         $this->assertSame($this->studyUid($reference), $this->studyUid($derived));
         $this->assertNotSame($this->seriesUid($reference), $this->seriesUid($derived));
     }
+
+    /** A multiframe DICOM File built from $count identically-sized JPEG frames. */
+    private function multiframe(int $count): File
+    {
+        return Convert::fromJpeg($this->jpegFrames($count), $this->outPath(), SopClass::newSC());
+    }
+
+    public function testToJpegFramesExtractsEveryFrameInOrder(): void
+    {
+        $dcm = $this->multiframe(3);
+        $prefix = $this->outPath();
+        // JPEG-derived SC frames carry no VOI window, so the default useWindow(1)
+        // would (correctly) fail loud; none() is the right mode for them.
+        $paths = (new Convert($dcm))->toJpegFrames($prefix, Windowing::none());
+        foreach ($paths as $path) {
+            $this->temps[] = $path;
+        }
+        $this->assertCount(3, $paths);
+        $this->assertStringEndsWith('.0.jpg', $paths[0]);
+        $this->assertStringEndsWith('.1.jpg', $paths[1]);
+        $this->assertStringEndsWith('.2.jpg', $paths[2]);
+        foreach ($paths as $path) {
+            $this->assertIsJpeg($path);
+        }
+    }
+
+    public function testToJpegFramesSingleFrameYieldsOneFile(): void
+    {
+        $prefix = $this->outPath();
+        $paths = (new Convert($this->image()))->toJpegFrames($prefix);
+        foreach ($paths as $path) {
+            $this->temps[] = $path;
+        }
+        $this->assertCount(1, $paths);
+        $this->assertIsJpeg($paths[0]);
+    }
+
+    public function testToJpegFramesAppliesScalingToEveryFrame(): void
+    {
+        $dcm = $this->multiframe(2);
+        $prefix = $this->outPath();
+        $paths = (new Convert($dcm))->toJpegFrames($prefix, Windowing::none(), scale: Scale::widthTo(64));
+        foreach ($paths as $path) {
+            $this->temps[] = $path;
+        }
+        $this->assertCount(2, $paths);
+        foreach ($paths as $path) {
+            $this->assertSame(64, getimagesize($path)[0]);
+        }
+    }
+
+    public function testToJpegFramesQualityOutOfRangeThrows(): void
+    {
+        $this->expectException(\InvalidArgumentException::class);
+        (new Convert($this->image()))->toJpegFrames($this->outPath(), quality: 101);
+    }
 }
