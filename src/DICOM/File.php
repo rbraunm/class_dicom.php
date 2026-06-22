@@ -93,6 +93,12 @@ final class File
         return $this->dataset;
     }
 
+    /** The file's path on disk. */
+    public function path(): string
+    {
+        return $this->path;
+    }
+
     /**
      * TransferSyntaxUID (0002,0010) from the file meta header.
      *
