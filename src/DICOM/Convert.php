@@ -158,4 +158,47 @@ final class Convert
 
         return File::open($outputPath, $toolkit);
     }
+
+    /**
+     * Create a DICOM Encapsulated PDF file from a PDF via pdf2dcm, returning the
+     * opened result so attributes can be stamped on it with the File tag accessors
+     * (this is v1's pdf_to_dcm territory).
+     *
+     * pdf2dcm wraps the whole document as a single Encapsulated PDF Storage
+     * instance -- there are no frames and only the one SOP class, so neither the
+     * image list nor the SopClass axis applies here. It generates new study/series
+     * UIDs and invents the required type-1 attributes by default, so the result is
+     * well-formed without a template. Pass a StudySeriesSource to file the document
+     * under an existing study or series instead.
+     *
+     * @param StudySeriesSource|null $studySeries where to file the result in the
+     *   Patient/Study/Series tree; defaults to fresh study and series UIDs
+     *
+     * @throws \DICOM\Exception\IOException the PDF could not be read
+     * @throws ConversionException pdf2dcm could not produce a DICOM (not a valid PDF)
+     * @throws \DICOM\Exception\ToolkitException pdf2dcm is missing or could not be started
+     */
+    public static function fromPdf(
+        string $pdfPath,
+        string $outputPath,
+        ?StudySeriesSource $studySeries = null,
+        ?Toolkit $toolkit = null,
+    ): File {
+        $studySeries ??= StudySeriesSource::generate();
+        $toolkit ??= new Toolkit();
+        // pdf2dcm: [options] pdffile-in dcmfile-out
+        $argv = array_merge($studySeries->flags(), [$pdfPath, $outputPath]);
+        $result = Tool::run($toolkit, 'pdf2dcm', $argv);
+        if (!$result->succeeded()) {
+            Tool::assertReadable($pdfPath);
+            throw new ConversionException(sprintf(
+                "Creating a DICOM from '%s' failed (pdf2dcm exit %d): %s",
+                $pdfPath,
+                $result->exitCode,
+                trim($result->stderr),
+            ));
+        }
+
+        return File::open($outputPath, $toolkit);
+    }
 }

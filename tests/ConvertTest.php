@@ -276,4 +276,64 @@ final class ConvertTest extends TestCase
         $this->assertSame($this->studyUid($reference), $this->studyUid($derived));
         $this->assertSame($this->seriesUid($reference), $this->seriesUid($derived));
     }
+
+    /** Write a minimal valid PDF (header + EOF, which is all pdf2dcm checks). */
+    private function samplePdf(): string
+    {
+        $path = $this->outPath();
+        file_put_contents(
+            $path,
+            "%PDF-1.4\n"
+            . "1 0 obj<</Type/Catalog/Pages 2 0 R>>endobj\n"
+            . "2 0 obj<</Type/Pages/Kids[3 0 R]/Count 1>>endobj\n"
+            . "3 0 obj<</Type/Page/Parent 2 0 R/MediaBox[0 0 612 792]>>endobj\n"
+            . "trailer<</Root 1 0 R/Size 4>>\n"
+            . "%%EOF\n"
+        );
+
+        return $path;
+    }
+
+    public function testFromPdfProducesEncapsulatedPdf(): void
+    {
+        $dcm = Convert::fromPdf($this->samplePdf(), $this->outPath());
+        $this->assertInstanceOf(File::class, $dcm);
+        // Encapsulated PDF Storage SOP class.
+        $this->assertSame('1.2.840.10008.5.1.4.1.1.104.1', $dcm->dataset()->get(0x0008, 0x0016));
+    }
+
+    public function testFromPdfReturnsTaggableFile(): void
+    {
+        $dcm = Convert::fromPdf($this->samplePdf(), $this->outPath());
+        $dcm->setText(Tag::PatientID, 'PDF-001');
+        $this->assertSame('PDF-001', $dcm->getText(Tag::PatientID));
+    }
+
+    public function testFromPdfNotAPdfFailsLoud(): void
+    {
+        $notPdf = $this->outPath();
+        file_put_contents($notPdf, 'this is not a pdf');
+
+        $this->expectException(ConversionException::class);
+        Convert::fromPdf($notPdf, $this->outPath());
+    }
+
+    public function testFromPdfMissingSourceThrowsIoException(): void
+    {
+        $this->expectException(\DICOM\Exception\IOException::class);
+        Convert::fromPdf('/nonexistent/source.pdf', $this->outPath());
+    }
+
+    public function testFromPdfStudyFromInheritsStudyButNotSeries(): void
+    {
+        // The same StudySeriesSource axis works with pdf2dcm, not just img2dcm.
+        $reference = Convert::fromPdf($this->samplePdf(), $this->outPath());
+        $derived = Convert::fromPdf(
+            $this->samplePdf(),
+            $this->outPath(),
+            StudySeriesSource::studyFrom($reference),
+        );
+        $this->assertSame($this->studyUid($reference), $this->studyUid($derived));
+        $this->assertNotSame($this->seriesUid($reference), $this->seriesUid($derived));
+    }
 }
