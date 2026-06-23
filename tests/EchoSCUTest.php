@@ -14,20 +14,7 @@ use PHPUnit\Framework\TestCase;
 final class EchoSCUTest extends TestCase
 {
     use StartsStoreScp;
-
-    /** @var list<string> */
-    private array $tempDirs = [];
-
-    private function tempDir(): string
-    {
-        $dir = sys_get_temp_dir() . '/pacs_echo_' . bin2hex(random_bytes(6));
-        if (!mkdir($dir, 0777, true) && !is_dir($dir)) {
-            throw new \RuntimeException("Could not create temp dir {$dir}.");
-        }
-        $this->tempDirs[] = $dir;
-
-        return $dir;
-    }
+    use ManagesTempDirs;
 
     /** A short connection timeout so the no-peer cases fail fast instead of hanging. */
     private function quickAssociation(string $callingAETitle = 'CLASS_DICOM'): Association
@@ -42,25 +29,7 @@ final class EchoSCUTest extends TestCase
     protected function tearDown(): void
     {
         $this->stopStoreScpPeers();
-        foreach ($this->tempDirs as $dir) {
-            $this->removeDir($dir);
-        }
-        $this->tempDirs = [];
-    }
-
-    private function removeDir(string $dir): void
-    {
-        if (!is_dir($dir)) {
-            return;
-        }
-        foreach (scandir($dir) ?: [] as $entry) {
-            if ($entry === '.' || $entry === '..') {
-                continue;
-            }
-            $path = $dir . '/' . $entry;
-            is_dir($path) ? $this->removeDir($path) : @unlink($path);
-        }
-        @rmdir($dir);
+        $this->cleanupTempDirs();
     }
 
     public function testVerifySucceedsAgainstRunningScp(): void
