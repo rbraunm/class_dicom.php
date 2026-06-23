@@ -20,7 +20,8 @@
     },
     "autoload-dev": {
         "psr-4": {
-            "DICOM\\Tests\\": "tests/"
+            "DICOM\\Tests\\": "tests/",
+            "PACS\\Tests\\": "tests/"
         }
     },
     "scripts": {
