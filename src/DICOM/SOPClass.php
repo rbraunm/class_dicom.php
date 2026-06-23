@@ -14,7 +14,7 @@ namespace DICOM;
  * multiframe-capable. img2dcm's Visible Light Photographic and Ophthalmic targets
  * fit this same shape and can be added when needed.
  */
-final class SopClass
+final class SOPClass
 {
     /**
      * @param list<string> $flags

@@ -9,7 +9,7 @@ use DICOM\Convert;
 use DICOM\Exception\ConversionException;
 use DICOM\File;
 use DICOM\Scale;
-use DICOM\SopClass;
+use DICOM\SOPClass;
 use DICOM\StudySeriesSource;
 use DICOM\Tag;
 use DICOM\Windowing;
@@ -183,14 +183,14 @@ final class ConvertTest extends TestCase
     public function testFromJpegMultipleProducesMultiframe(): void
     {
         $frames = $this->jpegFrames(2);
-        $dcm = Convert::fromJpeg($frames, $this->outPath(), SopClass::newSC());
+        $dcm = Convert::fromJpeg($frames, $this->outPath(), SOPClass::newSC());
         $this->assertSame(2, $dcm->getInteger(Tag::NumberOfFrames));
     }
 
     public function testFromJpegSingleWithNewScIsOneFrameMultiframe(): void
     {
         [$jpg] = $this->jpegFrames(1);
-        $dcm = Convert::fromJpeg([$jpg], $this->outPath(), SopClass::newSC());
+        $dcm = Convert::fromJpeg([$jpg], $this->outPath(), SOPClass::newSC());
         $this->assertSame(1, $dcm->getInteger(Tag::NumberOfFrames));
     }
 
@@ -226,7 +226,7 @@ final class ConvertTest extends TestCase
         $conv->toJPEG($small, scale: Scale::widthTo(64));
 
         $this->expectException(ConversionException::class);
-        Convert::fromJpeg([$big, $small], $this->outPath(), SopClass::newSC());
+        Convert::fromJpeg([$big, $small], $this->outPath(), SOPClass::newSC());
     }
 
     private function studyUid(File $file): ?string
@@ -340,7 +340,7 @@ final class ConvertTest extends TestCase
     /** A multiframe DICOM File built from $count identically-sized JPEG frames. */
     private function multiframe(int $count): File
     {
-        return Convert::fromJpeg($this->jpegFrames($count), $this->outPath(), SopClass::newSC());
+        return Convert::fromJpeg($this->jpegFrames($count), $this->outPath(), SOPClass::newSC());
     }
 
     public function testToJpegFramesExtractsEveryFrameInOrder(): void

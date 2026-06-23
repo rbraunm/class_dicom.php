@@ -162,14 +162,14 @@ final class Convert
      *
      * A single image with the default classic Secondary Capture SOP class yields a
      * single-frame object (v1's `jpg_to_dcm`). Multiple images yield one multiframe
-     * object, which requires SopClass::newSC(); the classic class cannot hold more
+     * object, which requires SOPClass::newSC(); the classic class cannot hold more
      * than one frame, so that combination is rejected before img2dcm is invoked.
      * The images must share dimensions for a multiframe result; img2dcm fails loud
      * (writing no output) otherwise. img2dcm invents the required type-1 attributes
      * (SOPInstanceUID and friends), so the result is well-formed without a template.
      *
      * @param list<string> $images one or more source image paths, in frame order
-     * @param SopClass|null $sopClass target SOP class; defaults to single-frame Secondary Capture
+     * @param SOPClass|null $sopClass target SOP class; defaults to single-frame Secondary Capture
      * @param StudySeriesSource|null $studySeries where to file the result in the
      *   Patient/Study/Series tree; defaults to fresh study and series UIDs
      *
@@ -183,7 +183,7 @@ final class Convert
     public static function fromJpeg(
         array $images,
         string $outputPath,
-        ?SopClass $sopClass = null,
+        ?SOPClass $sopClass = null,
         ?StudySeriesSource $studySeries = null,
         ?Toolkit $toolkit = null,
     ): File {
@@ -195,10 +195,10 @@ final class Convert
                 throw new \InvalidArgumentException('Every source image must be a non-empty path string.');
             }
         }
-        $sopClass ??= SopClass::secCapture();
+        $sopClass ??= SOPClass::secCapture();
         if (count($images) > 1 && !$sopClass->supportsMultipleFrames()) {
             throw new \InvalidArgumentException(
-                'Multiple images require a multiframe-capable SOP class; pass SopClass::newSC().'
+                'Multiple images require a multiframe-capable SOP class; pass SOPClass::newSC().'
             );
         }
         $studySeries ??= StudySeriesSource::generate();
@@ -228,7 +228,7 @@ final class Convert
      *
      * pdf2dcm wraps the whole document as a single Encapsulated PDF Storage
      * instance -- there are no frames and only the one SOP class, so neither the
-     * image list nor the SopClass axis applies here. It generates new study/series
+     * image list nor the SOPClass axis applies here. It generates new study/series
      * UIDs and invents the required type-1 attributes by default, so the result is
      * well-formed without a template. Pass a StudySeriesSource to file the document
      * under an existing study or series instead.
