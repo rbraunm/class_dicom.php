@@ -13,26 +13,10 @@ namespace PACS\Tests;
  */
 trait StartsStoreScp
 {
+    use AllocatesPorts;
+
     /** @var list<resource> */
     private array $peerProcesses = [];
-
-    /** Allocate a TCP port that is free right now (small TOCTOU window, fine for tests). */
-    private function freePort(): int
-    {
-        $server = @stream_socket_server('tcp://127.0.0.1:0', $errno, $errstr);
-        if ($server === false) {
-            throw new \RuntimeException("Could not allocate a free port: {$errstr} ({$errno}).");
-        }
-        $name = stream_socket_get_name($server, false);
-        fclose($server);
-        $colon = strrpos($name, ':');
-        $port = $colon === false ? 0 : (int) substr($name, $colon + 1);
-        if ($port < 1) {
-            throw new \RuntimeException("Could not parse an allocated port from '{$name}'.");
-        }
-
-        return $port;
-    }
 
     /** Start a storescp peer on $port storing to $outputDirectory; block until it accepts connections. */
     private function startStoreScp(int $port, string $outputDirectory, string $aeTitle = 'TEST_SCP'): void

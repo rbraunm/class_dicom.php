@@ -7,6 +7,7 @@ namespace DICOM;
 
 use DCMTK\CommandResult;
 use DCMTK\Exception\ExceptionInterface as DCMTKException;
+use DCMTK\Process;
 use DCMTK\Toolkit;
 use DICOM\Exception\IOException;
 use DICOM\Exception\ToolkitException;
@@ -33,6 +34,28 @@ final class Tool
         } catch (DCMTKException $e) {
             throw new ToolkitException(
                 sprintf("DICOM toolkit failed running '%s': %s", $tool, $e->getMessage()),
+                0,
+                $e,
+            );
+        }
+    }
+
+    /**
+     * Start a DCMTK tool as a background process (the async sibling of run),
+     * returning a handle. Translates a substrate failure into a DICOM-layer
+     * ToolkitException, so callers face only DICOM\Exception\ExceptionInterface.
+     *
+     * @param list<string> $argv
+     *
+     * @throws ToolkitException the tool is missing or the process could not start
+     */
+    public static function spawn(Toolkit $toolkit, string $tool, array $argv): Process
+    {
+        try {
+            return $toolkit->start($tool, $argv);
+        } catch (DCMTKException $e) {
+            throw new ToolkitException(
+                sprintf("DICOM toolkit failed starting '%s': %s", $tool, $e->getMessage()),
                 0,
                 $e,
             );

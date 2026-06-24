@@ -20,6 +20,7 @@ final class SCUTest extends TestCase
 {
     use StartsStoreScp;
     use ManagesTempDirs;
+    use CountsStoredFiles;
 
     private function example(): File
     {
@@ -45,32 +46,6 @@ final class SCUTest extends TestCase
     private function quickAssociation(): Association
     {
         return new Association(acseTimeoutSeconds: 5, connectionTimeoutSeconds: 2);
-    }
-
-    private function fileCount(string $dir): int
-    {
-        $count = 0;
-        foreach (scandir($dir) ?: [] as $entry) {
-            if ($entry !== '.' && $entry !== '..' && is_file($dir . '/' . $entry)) {
-                $count++;
-            }
-        }
-
-        return $count;
-    }
-
-    private function waitForFileCount(string $dir, int $expected, float $timeoutSeconds = 3.0): int
-    {
-        $deadline = microtime(true) + $timeoutSeconds;
-        do {
-            $count = $this->fileCount($dir);
-            if ($count >= $expected) {
-                return $count;
-            }
-            usleep(50000);
-        } while (microtime(true) < $deadline);
-
-        return $this->fileCount($dir);
     }
 
     protected function tearDown(): void
