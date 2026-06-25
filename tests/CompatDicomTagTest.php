@@ -15,11 +15,10 @@ use PHPUnit\Framework\TestCase;
  */
 final class CompatDicomTagTest extends TestCase
 {
+    use CapturesUserNotices;
+
     private const UNMAPPABLE_SOP_INSTANCE_UID =
         '1.2.826.0.1.3680043.8.498.62452443424004353900021327658620487418';
-
-    /** @var list<array{int, string}> */
-    private array $captured = [];
 
     private string $writableCopy = '';
 
@@ -29,30 +28,6 @@ final class CompatDicomTagTest extends TestCase
             unlink($this->writableCopy);
         }
         $this->writableCopy = '';
-    }
-
-    private function capture(callable $callable): mixed
-    {
-        $this->captured = [];
-        set_error_handler(function (int $errno, string $message): bool {
-            $this->captured[] = [$errno, $message];
-
-            return true;
-        });
-        try {
-            return $callable();
-        } finally {
-            restore_error_handler();
-        }
-    }
-
-    /** @return list<array{int, string}> */
-    private function noticesOf(int $type): array
-    {
-        return array_values(array_filter(
-            $this->captured,
-            static fn (array $notice): bool => $notice[0] === $type,
-        ));
     }
 
     private function fixture(string $name): string

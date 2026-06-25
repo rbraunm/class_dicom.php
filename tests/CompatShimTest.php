@@ -19,40 +19,11 @@ use PHPUnit\Framework\TestCase;
  */
 final class CompatShimTest extends TestCase
 {
-    /** @var list<array{int, string}> */
-    private array $captured = [];
+    use CapturesUserNotices;
 
     protected function tearDown(): void
     {
         ShimContract::$dcmdumpTimeoutSeconds = 5.0;
-    }
-
-    /**
-     * Run $callable with a scoped handler that records E_USER_* notices and returns
-     * true so they do not propagate to PHPUnit. Returns the callable's result.
-     */
-    private function capture(callable $callable): mixed
-    {
-        $this->captured = [];
-        set_error_handler(function (int $errno, string $message): bool {
-            $this->captured[] = [$errno, $message];
-
-            return true;
-        });
-        try {
-            return $callable();
-        } finally {
-            restore_error_handler();
-        }
-    }
-
-    /** @return list<array{int, string}> */
-    private function noticesOf(int $type): array
-    {
-        return array_values(array_filter(
-            $this->captured,
-            static fn (array $notice): bool => $notice[0] === $type,
-        ));
     }
 
     private function fixture(string $name): string

@@ -53,6 +53,17 @@ class dicom_convert
     /** @var int Thumbnail width in pixels for dcm_to_tn(). */
     public $tn_size = 125;
 
+    /**
+     * @var string @deprecated v2 builds DICOM via img2dcm, which mints its own
+     *             type-1 UIDs; this dcm2xml template is ignored.
+     */
+    public $template = '';
+
+    /**
+     * @var string @deprecated v2 needs no working directory for creation; ignored.
+     */
+    public $temp_dir = '';
+
     public function __construct($file = '')
     {
         $this->file = $file;
@@ -148,5 +159,81 @@ class dicom_convert
             },
             $out,
         );
+    }
+
+    /**
+     * Create a DICOM from the JPEG at $jpg_file, apply the "gggg,eeee" => value tags
+     * in $arr_info, and return the output path "{jpg_file}.dcm". v2 builds the DICOM
+     * via img2dcm, which mints its own type-1 UIDs, so v1's xml2dcm SOPInstanceUID
+     * bug cannot occur. This is improved v2 behavior, not a reproduction of v1's
+     * template-driven conversion -- a set $template is ignored (with a deprecation).
+     *
+     * @param array<string, string> $arr_info
+     * @return string
+     */
+    public function jpg_to_dcm($arr_info)
+    {
+        if ((string) $this->template !== '') {
+            ShimContract::deprecate(
+                'jpg_to_dcm(): $template is ignored. v2 builds the DICOM via img2dcm, '
+                . 'which mints its own type-1 UIDs; move any template tags into the '
+                . '$arr_info map. This compatibility behavior may change in v3.',
+            );
+        }
+        $out = (string) $this->jpg_file . '.dcm';
+
+        return ShimContract::run(
+            'jpg_to_dcm() is deprecated; use DICOM\\Convert::fromJpeg() in new code.',
+            function () use ($out, $arr_info): string {
+                Convert::fromJpeg([(string) $this->jpg_file], $out);
+                ShimContract::applyTags($out, (array) $arr_info);
+
+                return $out;
+            },
+            $out,
+        );
+    }
+
+    /**
+     * Create an Encapsulated PDF DICOM from the PDF at $file, apply the
+     * "gggg,eeee" => value tags in $arr_info, and return "{file}.dcm". This is
+     * working v2 functionality (v1's PDF conversion was non-functional), documented
+     * as improved behavior rather than a validated v1 reproduction.
+     *
+     * @param array<string, string> $arr_info
+     * @return string
+     */
+    public function pdf_to_dcm($arr_info)
+    {
+        $out = (string) $this->file . '.dcm';
+
+        return ShimContract::run(
+            'pdf_to_dcm() is deprecated; use DICOM\\Convert::fromPdf() in new code. '
+            . 'This is improved v2 Encapsulated PDF conversion, not a reproduction of '
+            . 'v1 (whose PDF conversion was non-functional).',
+            function () use ($out, $arr_info): string {
+                Convert::fromPdf((string) $this->file, $out);
+                ShimContract::applyTags($out, (array) $arr_info);
+
+                return $out;
+            },
+            $out,
+        );
+    }
+
+    /**
+     * Deprecated alias of pdf_to_dcm(), preserved from v1's surface.
+     *
+     * @param array<string, string> $arr_info
+     * @return string
+     */
+    public function pdf_to_dcmcr($arr_info)
+    {
+        ShimContract::deprecate(
+            'pdf_to_dcmcr() is a deprecated alias of pdf_to_dcm(); use '
+            . 'DICOM\\Convert::fromPdf() in new code.',
+        );
+
+        return $this->pdf_to_dcm($arr_info);
     }
 }

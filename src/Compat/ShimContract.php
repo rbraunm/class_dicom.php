@@ -260,4 +260,33 @@ final class ShimContract
             @trigger_error($fallbackFailure->getMessage(), E_USER_WARNING);
         }
     }
+
+    /**
+     * Apply a v1 "gggg,eeee" => value tag map to an existing file via Dataset::put.
+     * A structurally malformed key (not two hex groups) is skipped with an
+     * E_USER_WARNING rather than aborting the whole conversion -- v1 silently
+     * ignored such keys, and the shim surfaces the skip instead of hiding it. A
+     * Dataset::put that the toolkit rejects throws a marker for the caller's soften.
+     *
+     * @param array<string, string> $arr_info
+     */
+    public static function applyTags(string $path, array $arr_info): void
+    {
+        if ($arr_info === []) {
+            return;
+        }
+        $dataset = new Dataset($path);
+        foreach ($arr_info as $key => $value) {
+            $parts = explode(',', (string) $key);
+            if (count($parts) !== 2 || !ctype_xdigit($parts[0]) || !ctype_xdigit($parts[1])) {
+                @trigger_error(
+                    "ignored malformed tag key '{$key}' (expected \"GGGG,EEEE\").",
+                    E_USER_WARNING,
+                );
+
+                continue;
+            }
+            $dataset->put(hexdec($parts[0]), hexdec($parts[1]), (string) $value);
+        }
+    }
 }
