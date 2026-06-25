@@ -6,6 +6,8 @@ This package is a fork of Dean Vaughan's originally-unlicensed `class_dicom.php`
 
 The full plan -- clean-room discipline, licensing and provenance artifacts, architecture, capability scope, research methodology, phased delivery, testing, and done criteria -- lives in **[docs/v2-rewrite-plan.md](docs/v2-rewrite-plan.md)** and is maintained there only. This roadmap intentionally does not restate it.
 
+**Status (current):** the clean-room wrapper is landed through the `DICOM\` and `PACS\` layers -- detection, tags, conversion, compression, and DICOM networking (C-ECHO, C-STORE SCU and SCP) are complete and CI-green. The backward-compatibility shim and the docs/release step remain; phase-level detail is in the plan.
+
 ## v1.1.0 (current)
 
 PHP 8.x compatibility fixes and an integration test suite.

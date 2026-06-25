@@ -5,60 +5,51 @@ declare(strict_types=1);
 
 namespace DICOM;
 
-use DCMTK\CommandResult;
-use DCMTK\Exception\ExceptionInterface as DCMTKException;
 use DCMTK\Toolkit;
 use DICOM\Exception\InvalidDICOMException;
-use DICOM\Exception\IOException;
-use DICOM\Exception\ToolkitException;
-use DICOM\Exception\ValueExceedsReadLimitException;
+use DICOM\Value\Date;
+use DICOM\Value\DateTime;
+use DICOM\Value\PersonName;
+use DICOM\Value\Time;
+use DICOM\Value\UID;
 
 /**
- * A DICOM file. Detection and metadata reads are wrapped DCMTK invocations:
- * `dcmftest` for the Part 10 check, and a single `dcmdump` (raw UIDs, large
- * values skipped) whose output is parsed once and cached for every tag read.
+ * A DICOM Part 10 file: detection (dcmftest), the file-meta header accessors,
+ * the typed tag API, and ownership of the file's Dataset (its data elements).
  *
- * Operational failures are always `DICOM\Exception\ExceptionInterface`, in one of
- * four concrete forms:
- * - IOException: the file is missing or unreadable (including if it vanishes
- *   between open() and a later read).
- * - InvalidDICOMException: the file reads but is not DICOM, or its dataset is
- *   malformed or missing a required file-meta UID.
- * - ToolkitException: the backing DCMTK tool is missing or could not be started
- *   (a substrate failure translated at this boundary).
- * - ValueExceedsReadLimitException: a tag is present but its value was larger
- *   than maxReadLengthKB and was not loaded.
- * Separately, a programming error -- an out-of-range maxReadLengthKB -- raises
- * \InvalidArgumentException, which is misuse rather than an operational failure.
+ * Tags are addressed by the generated Tag enum and read/written as typed values:
+ * getDate(Tag::StudyDate), setPersonName(Tag::PatientName, ...). Each accessor is
+ * gated on the tag's value representation -- asking for a date tag as an integer
+ * is a programming error and raises \InvalidArgumentException before any tool
+ * runs. The raw, string-valued surface is reached via dataset().
+ *
+ * In DICOM terms this models the Part 10 file (preamble + file-meta group 0002 +
+ * dataset); Dataset models the data-element collection the file contains.
+ *
+ * Operational failures are DICOM\Exception\ExceptionInterface (IOException,
+ * InvalidDICOMException, ToolkitException); reads through the Dataset may also
+ * raise ValueExceedsReadLimitException. A malformed value stored in the file
+ * surfaces as InvalidDICOMException when read through a typed accessor.
  */
 final class File
 {
-    /** Default +R --max-read-length passed to dcmdump, in kbytes. */
-    public const int DEFAULT_MAX_READ_LENGTH_KB = 4;
-
-    /** Bounds DCMTK accepts for +R --max-read-length (kbytes). */
-    private const int MIN_READ_LENGTH_KB = 4;
-    private const int MAX_READ_LENGTH_KB = 4194302;
-
-    /**
-     * Process-wide default used when open() is called without an explicit
-     * maxReadLengthKB. Set once at bootstrap via configureDefaultMaxReadLengthKB;
-     * an explicit open() argument still overrides it.
-     */
-    private static int $defaultMaxReadLengthKB = self::DEFAULT_MAX_READ_LENGTH_KB;
-
-    private bool $tagsLoaded = false;
-
-    /** @var array<string, string> top-level tag "gggg,eeee" => raw value */
-    private array $tagValues = [];
-
-    /** @var array<string, int> top-level tag "gggg,eeee" => byte length, for values skipped by -M */
-    private array $tagNotLoaded = [];
+    /** Value representation -> typed-accessor family. */
+    private const array FAMILIES = [
+        'DA' => 'date',
+        'TM' => 'time',
+        'DT' => 'dateTime',
+        'PN' => 'personName',
+        'UI' => 'uid',
+        'IS' => 'integer', 'US' => 'integer', 'UL' => 'integer',
+        'SS' => 'integer', 'SL' => 'integer', 'SV' => 'integer', 'UV' => 'integer',
+        'DS' => 'decimal', 'FL' => 'decimal', 'FD' => 'decimal',
+        'AE' => 'text', 'AS' => 'text', 'CS' => 'text', 'LO' => 'text', 'LT' => 'text',
+        'SH' => 'text', 'ST' => 'text', 'UC' => 'text', 'UR' => 'text', 'UT' => 'text',
+    ];
 
     private function __construct(
         private readonly string $path,
-        private readonly Toolkit $toolkit,
-        private readonly int $maxReadLengthKB,
+        private readonly Dataset $dataset,
     ) {
     }
 
@@ -66,59 +57,52 @@ final class File
      * True if $path is a DICOM Part 10 file. A readable non-DICOM file returns
      * false.
      *
-     * @throws IOException the file is missing or unreadable
-     * @throws ToolkitException dcmftest is missing or could not be started
+     * @throws \DICOM\Exception\IOException the file is missing or unreadable
+     * @throws \DICOM\Exception\ToolkitException dcmftest is missing or could not be started
      */
     public static function isDICOM(string $path, ?Toolkit $toolkit = null): bool
     {
-        self::assertReadable($path);
+        Tool::assertReadable($path);
         $toolkit ??= new Toolkit();
 
-        return self::runTool($toolkit, 'dcmftest', [$path])->succeeded();
+        return Tool::run($toolkit, 'dcmftest', [$path])->succeeded();
     }
 
     /**
-     * Open a DICOM file for metadata access. maxReadLengthKB sets dcmdump's +R
-     * read limit (kbytes) for this file: values larger than it are not loaded and
-     * surface as ValueExceedsReadLimitException on read. When null, the
-     * process-wide default (DEFAULT_MAX_READ_LENGTH_KB, or whatever
-     * configureDefaultMaxReadLengthKB last set) is used.
+     * Open a DICOM file. maxReadLengthKB sets the Dataset's dcmdump +R read limit
+     * (kbytes); when null the process-wide Dataset default is used.
      *
-     * @throws IOException the file is missing or unreadable
+     * @throws \DICOM\Exception\IOException the file is missing or unreadable
      * @throws InvalidDICOMException the file reads but is not DICOM
-     * @throws ToolkitException dcmftest is missing or could not be started
+     * @throws \DICOM\Exception\ToolkitException dcmftest is missing or could not be started
      * @throws \InvalidArgumentException maxReadLengthKB is outside DCMTK's range
      */
     public static function open(string $path, ?Toolkit $toolkit = null, ?int $maxReadLengthKB = null): self
     {
-        $effectiveMaxReadLengthKB = $maxReadLengthKB ?? self::$defaultMaxReadLengthKB;
-        self::assertReadLengthInRange($effectiveMaxReadLengthKB);
         $toolkit ??= new Toolkit();
         if (!self::isDICOM($path, $toolkit)) {
             throw new InvalidDICOMException("Not a DICOM Part 10 file: '{$path}'.");
         }
 
-        return new self($path, $toolkit, $effectiveMaxReadLengthKB);
+        return new self($path, new Dataset($path, $toolkit, $maxReadLengthKB));
     }
 
-    /**
-     * Set the process-wide default maxReadLengthKB for later open() calls that do
-     * not pass one explicitly. An explicit open() argument still overrides it.
-     *
-     * @throws \InvalidArgumentException the value is outside DCMTK's accepted range
-     */
-    public static function configureDefaultMaxReadLengthKB(int $maxReadLengthKB): void
+    /** The file's data elements: the raw string read/write surface. */
+    public function dataset(): Dataset
     {
-        self::assertReadLengthInRange($maxReadLengthKB);
-        self::$defaultMaxReadLengthKB = $maxReadLengthKB;
+        return $this->dataset;
+    }
+
+    /** The file's path on disk. */
+    public function path(): string
+    {
+        return $this->path;
     }
 
     /**
      * TransferSyntaxUID (0002,0010) from the file meta header.
      *
-     * @throws IOException the file vanished or became unreadable since open()
      * @throws InvalidDICOMException the dataset is malformed or the UID is absent
-     * @throws ToolkitException dcmdump is missing or could not be started
      */
     public function transferSyntaxUID(): string
     {
@@ -128,71 +112,144 @@ final class File
     /**
      * MediaStorageSOPClassUID (0002,0002) from the file meta header.
      *
-     * @throws IOException the file vanished or became unreadable since open()
      * @throws InvalidDICOMException the dataset is malformed or the UID is absent
-     * @throws ToolkitException dcmdump is missing or could not be started
      */
     public function mediaStorageSOPClassUID(): string
     {
         return $this->requireUID(0x0002, 0x0002, 'MediaStorageSOPClassUID');
     }
 
-    /**
-     * Raw value of a top-level tag, exactly as dcmdump prints it (multi-value
-     * components stay backslash-separated; typed parsing is a later concern).
-     * Returns null when the tag is not present in the file.
-     *
-     * @throws IOException the file vanished or became unreadable since open()
-     * @throws InvalidDICOMException the dataset is malformed
-     * @throws ToolkitException dcmdump is missing or could not be started
-     * @throws ValueExceedsReadLimitException the tag is present but its value
-     *   exceeded maxReadLengthKB and was not loaded
-     */
-    public function tag(int $group, int $element): ?string
+    // ---- typed reads. Null means the tag is absent. ----
+
+    public function getDate(Tag $tag): ?Date
     {
-        $this->ensureTagsLoaded();
-        $key = self::tagKey($group, $element);
-        if (array_key_exists($key, $this->tagValues)) {
-            return $this->tagValues[$key];
+        return $this->parsed($this->readSingle($this->gate($tag, 'date')), Date::fromDICOM(...));
+    }
+
+    public function getTime(Tag $tag): ?Time
+    {
+        return $this->parsed($this->readSingle($this->gate($tag, 'time')), Time::fromDICOM(...));
+    }
+
+    public function getDateTime(Tag $tag): ?DateTime
+    {
+        return $this->parsed($this->readSingle($this->gate($tag, 'dateTime')), DateTime::fromDICOM(...));
+    }
+
+    public function getPersonName(Tag $tag): ?PersonName
+    {
+        return $this->parsed($this->readSingle($this->gate($tag, 'personName')), PersonName::fromDICOM(...));
+    }
+
+    public function getUID(Tag $tag): ?UID
+    {
+        return $this->parsed($this->readSingle($this->gate($tag, 'uid')), UID::fromDICOM(...));
+    }
+
+    public function getInteger(Tag $tag): ?int
+    {
+        $raw = $this->readSingle($this->gate($tag, 'integer'));
+        if ($raw === null) {
+            return null;
         }
-        if (array_key_exists($key, $this->tagNotLoaded)) {
-            throw new ValueExceedsReadLimitException($key, $this->tagNotLoaded[$key], $this->maxReadLengthKB);
+        $trimmed = trim($raw);
+        if (!preg_match('/^[+-]?\d+$/', $trimmed)) {
+            throw new InvalidDICOMException(sprintf("Malformed integer value '%s' in '%s'.", $raw, $this->path));
         }
 
-        return null;
+        return (int) $trimmed;
+    }
+
+    public function getDecimal(Tag $tag): ?float
+    {
+        $raw = $this->readSingle($this->gate($tag, 'decimal'));
+        if ($raw === null) {
+            return null;
+        }
+        $trimmed = trim($raw);
+        if (!is_numeric($trimmed)) {
+            throw new InvalidDICOMException(sprintf("Malformed decimal value '%s' in '%s'.", $raw, $this->path));
+        }
+
+        return (float) $trimmed;
+    }
+
+    public function getText(Tag $tag): ?string
+    {
+        return $this->readSingle($this->gate($tag, 'text'));
     }
 
     /**
-     * Every top-level tag in the file, "gggg,eeee" => raw value. A value that
-     * exceeded maxReadLengthKB and was not loaded is listed with a null value;
-     * tag() throws ValueExceedsReadLimitException for those.
+     * A multi-valued text tag as its list of components. An absent tag is the
+     * empty list.
      *
-     * @return array<string, ?string>
-     *
-     * @throws IOException the file vanished or became unreadable since open()
-     * @throws InvalidDICOMException the dataset is malformed
-     * @throws ToolkitException dcmdump is missing or could not be started
+     * @return list<string>
      */
-    public function tags(): array
+    public function getTextList(Tag $tag): array
     {
-        $this->ensureTagsLoaded();
-        $all = $this->tagValues;
-        foreach (array_keys($this->tagNotLoaded) as $key) {
-            $all[$key] = null;
-        }
-        ksort($all);
+        $info = $this->gate($tag, 'text');
+        $raw = $this->dataset->get($info->group, $info->element);
 
-        return $all;
+        return $raw === null ? [] : explode('\\', $raw);
+    }
+
+    // ---- typed writes. Insert-or-overwrite, in place. ----
+
+    public function setDate(Tag $tag, Date $value): void
+    {
+        $this->write($this->gate($tag, 'date'), $value->toDICOM());
+    }
+
+    public function setTime(Tag $tag, Time $value): void
+    {
+        $this->write($this->gate($tag, 'time'), $value->toDICOM());
+    }
+
+    public function setDateTime(Tag $tag, DateTime $value): void
+    {
+        $this->write($this->gate($tag, 'dateTime'), $value->toDICOM());
+    }
+
+    public function setPersonName(Tag $tag, PersonName $value): void
+    {
+        $this->write($this->gate($tag, 'personName'), $value->toDICOM());
+    }
+
+    public function setUID(Tag $tag, UID $value): void
+    {
+        $this->write($this->gate($tag, 'uid'), $value->toDICOM());
+    }
+
+    public function setInteger(Tag $tag, int $value): void
+    {
+        $this->write($this->gate($tag, 'integer'), (string) $value);
+    }
+
+    public function setDecimal(Tag $tag, float $value): void
+    {
+        $this->write($this->gate($tag, 'decimal'), (string) $value);
+    }
+
+    public function setText(Tag $tag, string $value): void
+    {
+        $this->write($this->gate($tag, 'text'), $value);
+    }
+
+    /** @param list<string> $values */
+    public function setTextList(Tag $tag, array $values): void
+    {
+        $this->write($this->gate($tag, 'text'), implode('\\', $values));
     }
 
     private function requireUID(int $group, int $element, string $name): string
     {
-        $value = $this->tag($group, $element);
+        $value = $this->dataset->get($group, $element);
         if ($value === null) {
             throw new InvalidDICOMException(sprintf(
-                "%s (%s) is not present in '%s'.",
+                '%s (%04x,%04x) is not present in \'%s\'.',
                 $name,
-                self::tagKey($group, $element),
+                $group,
+                $element,
                 $this->path,
             ));
         }
@@ -201,126 +258,76 @@ final class File
     }
 
     /**
-     * Run dcmdump once and cache its parsed output. -q quiet, -Un raw bracketed
-     * UIDs (not name-mapped), -M skip values longer than +R so large binaries
-     * (e.g. pixel data) are not loaded, +L print loaded values completely (dcmdump
-     * otherwise truncates long values in the display regardless of +R), +R the
-     * configured limit in kbytes. dcmdump reports a skipped value's byte length in
-     * its line comment, which feeds ValueExceedsReadLimitException.
+     * Resolve the tag and confirm its value representation matches the accessor's
+     * family. A mismatch is a programming error (wrong accessor for the tag), not
+     * an operational failure, so it raises \InvalidArgumentException before any
+     * tool runs.
      */
-    private function ensureTagsLoaded(): void
+    private function gate(Tag $tag, string $family): TagInfo
     {
-        if ($this->tagsLoaded) {
-            return;
-        }
-        $result = self::runTool($this->toolkit, 'dcmdump', [
-            '-q',
-            '-Un',
-            '-M',
-            '+L',
-            '+R',
-            (string) $this->maxReadLengthKB,
-            $this->path,
-        ]);
-        if (!$result->succeeded()) {
-            // dcmftest passed at open(), so a failure now is either the file having
-            // gone unreadable since (I/O) or a dataset malformed beyond the shallow
-            // Part 10 check. assertReadable throws IOException if the file is gone;
-            // otherwise it is malformed.
-            self::assertReadable($this->path);
-            throw new InvalidDICOMException(sprintf(
-                "Reading tags from '%s' failed (dcmdump exit %d): %s",
-                $this->path,
-                $result->exitCode,
-                trim($result->stderr),
+        $info = $tag->info();
+        $actual = self::FAMILIES[$info->valueRepresentation] ?? null;
+        if ($actual !== $family) {
+            throw new \InvalidArgumentException(sprintf(
+                '%s is a %s tag (%s); it cannot be accessed as %s.',
+                $tag->name,
+                $info->valueRepresentation,
+                $actual ?? 'an unsupported type',
+                $family,
             ));
         }
-        [$this->tagValues, $this->tagNotLoaded] = self::parseDump($result->stdout);
-        $this->tagsLoaded = true;
+
+        return $info;
     }
 
     /**
-     * Parse `dcmdump -Un -M +L` output into top-level tag maps. Each element prints
-     * as "(gggg,eeee) VR <value>  # <length>, <vm> <Keyword>"; sequence items are
-     * indented, so anchoring to the start of the line keeps only top-level
-     * elements. +L makes dcmdump print loaded values in full, so a value is either
-     * complete or "(not loaded)" (skipped by -M because it exceeds +R), whose byte
-     * length is kept from the comment for ValueExceedsReadLimitException. A
-     * zero-length value is the empty string regardless of how dcmdump renders it.
-     *
-     * @return array{0: array<string, string>, 1: array<string, int>} loaded values,
-     *   then byte lengths of values skipped by -M
+     * Read a single-valued element. A backslash means DICOM multiple values,
+     * which a single-value accessor cannot represent: fail loudly rather than
+     * silently return the first component.
      */
-    private static function parseDump(string $dump): array
+    private function readSingle(TagInfo $info): ?string
     {
-        $pattern = '/^\((?<group>[0-9a-fA-F]{4}),(?<element>[0-9a-fA-F]{4})\) '
-            . '(?<vr>..) (?<value>.*?) +# +(?<length>\d+), +\d+ /m';
-        preg_match_all($pattern, $dump, $matches, PREG_SET_ORDER);
-
-        $values = [];
-        $notLoaded = [];
-        foreach ($matches as $match) {
-            $key = strtolower($match['group']) . ',' . strtolower($match['element']);
-            $value = $match['value'];
-            $length = (int) $match['length'];
-            if ($value === '(not loaded)') {
-                // -M skipped the value: it is larger than +R maxReadLengthKB.
-                $notLoaded[$key] = $length;
-            } elseif ($length === 0) {
-                // Present but empty (type-2), however dcmdump renders zero length.
-                $values[$key] = '';
-            } elseif ($value !== '' && $value[0] === '[' && str_ends_with($value, ']')) {
-                $values[$key] = substr($value, 1, -1);
-            } else {
-                $values[$key] = $value;
-            }
+        $raw = $this->dataset->get($info->group, $info->element);
+        if ($raw !== null && str_contains($raw, '\\')) {
+            throw new \InvalidArgumentException(sprintf(
+                'Tag (%04x,%04x) holds multiple values; read it via dataset()->get(), or getTextList() for text.',
+                $info->group,
+                $info->element,
+            ));
         }
 
-        return [$values, $notLoaded];
-    }
-
-    private static function tagKey(int $group, int $element): string
-    {
-        return sprintf('%04x,%04x', $group, $element);
+        return $raw;
     }
 
     /**
-     * Run a DCMTK tool through the substrate, translating any substrate failure
-     * (a missing tool, or a process that could not start) into a DICOM-layer
-     * ToolkitException so callers of this API only ever catch
-     * `DICOM\Exception\ExceptionInterface`.
+     * Run a stored raw value through a value parser, elevating a parse failure
+     * (the file holds a malformed value for this VR) to InvalidDICOMException. A
+     * null raw (absent tag) stays null.
      *
-     * @param list<string> $argv
+     * @template T
+     *
+     * @param callable(string): T $parse
+     *
+     * @return T|null
      */
-    private static function runTool(Toolkit $toolkit, string $tool, array $argv): CommandResult
+    private function parsed(?string $raw, callable $parse): mixed
     {
+        if ($raw === null) {
+            return null;
+        }
         try {
-            return $toolkit->run($tool, $argv);
-        } catch (DCMTKException $e) {
-            throw new ToolkitException(
-                sprintf("DICOM toolkit failed running '%s': %s", $tool, $e->getMessage()),
+            return $parse($raw);
+        } catch (\InvalidArgumentException $e) {
+            throw new InvalidDICOMException(
+                sprintf("Malformed value in '%s': %s", $this->path, $e->getMessage()),
                 0,
                 $e,
             );
         }
     }
 
-    private static function assertReadable(string $path): void
+    private function write(TagInfo $info, string $encoded): void
     {
-        if (!is_file($path) || !is_readable($path)) {
-            throw new IOException("File not readable: '{$path}'.");
-        }
-    }
-
-    private static function assertReadLengthInRange(int $maxReadLengthKB): void
-    {
-        if ($maxReadLengthKB < self::MIN_READ_LENGTH_KB || $maxReadLengthKB > self::MAX_READ_LENGTH_KB) {
-            throw new \InvalidArgumentException(sprintf(
-                'maxReadLengthKB must be within [%d, %d], got %d.',
-                self::MIN_READ_LENGTH_KB,
-                self::MAX_READ_LENGTH_KB,
-                $maxReadLengthKB,
-            ));
-        }
+        $this->dataset->put($info->group, $info->element, $encoded);
     }
 }

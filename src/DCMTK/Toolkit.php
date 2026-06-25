@@ -148,6 +148,34 @@ final class Toolkit
     }
 
     /**
+     * Start a DCMTK tool as a long-running background process and return a handle.
+     * Unlike run(), this does not wait for completion -- it is for daemons such as
+     * storescp. stdout and stderr are discarded (nothing reads them, so there are
+     * no pipes to drain; the tool's real output is its side effects). Throws when
+     * the tool is missing or the process cannot be started.
+     *
+     * @param list<string> $argv
+     */
+    public function start(string $tool, array $argv): Process
+    {
+        $binary = $this->locate($tool);
+        $descriptors = [
+            0 => ['file', '/dev/null', 'r'],
+            1 => ['file', '/dev/null', 'w'],
+            2 => ['file', '/dev/null', 'w'],
+        ];
+        $pipes = [];
+        $process = proc_open([$binary, ...$argv], $descriptors, $pipes);
+        if (!is_resource($process)) {
+            throw new InvocationFailedException("Could not start '{$binary}'.");
+        }
+        $status = proc_get_status($process);
+        $this->logger?->debug('{tool} started', ['tool' => $tool, 'pid' => $status['pid']]);
+
+        return new Process($process, $status['pid']);
+    }
+
+    /**
      * First line of a tool's `--version` output (identifies the installed DCMTK).
      * Throws if the tool exits non-zero or emits no parseable version line; never
      * returns an empty string.
