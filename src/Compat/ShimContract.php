@@ -10,6 +10,8 @@ declare(strict_types=1);
 namespace Compat;
 
 use DCMTK\Exception\ExceptionInterface as ToolkitException;
+use DCMTK\Toolkit;
+use DICOM\Dataset;
 use DICOM\Exception\ExceptionInterface as DICOMException;
 use PACS\Exception\ExceptionInterface as PACSException;
 
@@ -157,5 +159,71 @@ final class ShimContract
         }
 
         return $exitCode === 0 ? 1 : 0;
+    }
+
+    /**
+     * Read every top-level tag from $file with dcmdump in name-rendering mode (no
+     * -Un, so dcmdump maps well-known UIDs to dictionary names) and return a
+     * "gggg,eeee" => value map. This is the shim-local counterpart to Dataset's
+     * numeric read: the base Dataset always reads with -Un and never produces a
+     * name-mapped value, so the name rendering -- and the parse that strips its
+     * marker -- live here, not in core. A read failure (e.g. a missing file:
+     * dcmdump exits non-zero with no output) yields an empty map, matching v1's
+     * loose load_tags. A missing dcmdump binary throws a DCMTK exception for the
+     * caller's soften layer.
+     *
+     * @return array<string, string>
+     */
+    public static function readNameRenderedTags(Toolkit $toolkit, string $file): array
+    {
+        $result = $toolkit->run('dcmdump', [
+            '-q',
+            '-M',
+            '+L',
+            '+R',
+            (string) Dataset::DEFAULT_MAX_READ_LENGTH_KB,
+            $file,
+        ]);
+
+        return self::parseNameRenderedDump($result->stdout);
+    }
+
+    /**
+     * Parse dcmdump name-mode output into a "gggg,eeee" => value map. Mirrors the
+     * shape Dataset parses, with one addition for this mode: dcmdump prints a
+     * name-mapped UID as "=Name" (e.g. "=JPEGBaseline"), so a leading "=" is
+     * stripped to yield the bare name. A bracketed value "[...]" (any unmapped
+     * value, including a UID dcmdump could not name) has its brackets stripped,
+     * exactly as the numeric read does. Values skipped by -M for exceeding +R are
+     * omitted from the map.
+     *
+     * @return array<string, string>
+     */
+    public static function parseNameRenderedDump(string $dump): array
+    {
+        $pattern = '/^\((?<group>[0-9a-fA-F]{4}),(?<element>[0-9a-fA-F]{4})\) '
+            . '(?<vr>..) (?<value>.*?) +# +(?<length>\d+), +\d+ /m';
+        preg_match_all($pattern, $dump, $matches, PREG_SET_ORDER);
+
+        $tags = [];
+        foreach ($matches as $match) {
+            $key = strtolower($match['group']) . ',' . strtolower($match['element']);
+            $value = $match['value'];
+            $length = (int) $match['length'];
+            if ($value === '(not loaded)') {
+                continue;
+            }
+            if ($length === 0) {
+                $tags[$key] = '';
+            } elseif ($value !== '' && $value[0] === '[' && str_ends_with($value, ']')) {
+                $tags[$key] = substr($value, 1, -1);
+            } elseif ($value !== '' && $value[0] === '=') {
+                $tags[$key] = substr($value, 1);
+            } else {
+                $tags[$key] = $value;
+            }
+        }
+
+        return $tags;
     }
 }
