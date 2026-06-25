@@ -226,4 +226,38 @@ final class ShimContract
 
         return $tags;
     }
+
+    /**
+     * Run a primary render, and on a substrate-layer failure fall back to a second
+     * render -- reproducing v1's dcm_to_jpg/dcm_to_tn behavior of trying VOI window
+     * 1 and dropping to min-max windowing for images with no stored window. Emits
+     * the method deprecation once up front; when the fallback is actually engaged
+     * it emits a second E_USER_DEPRECATED ($fallbackNotice) flagging that this
+     * silent fallback is going away in v3. If the fallback also fails, the failure
+     * is softened to an E_USER_WARNING (the caller still gets back its output path,
+     * exactly as v1 returns the path regardless of success).
+     *
+     * @param callable():void $primary
+     * @param callable():void $fallback
+     */
+    public static function runWithVoiFallback(
+        string $notice,
+        string $fallbackNotice,
+        callable $primary,
+        callable $fallback,
+    ): void {
+        self::deprecate($notice);
+        try {
+            $primary();
+
+            return;
+        } catch (DICOMException | PACSException | ToolkitException $primaryFailure) {
+            @trigger_error($fallbackNotice, E_USER_DEPRECATED);
+        }
+        try {
+            $fallback();
+        } catch (DICOMException | PACSException | ToolkitException $fallbackFailure) {
+            @trigger_error($fallbackFailure->getMessage(), E_USER_WARNING);
+        }
+    }
 }

@@ -22,7 +22,8 @@
             "compat/functions.php"
         ],
         "classmap": [
-            "compat/dicom_tag.php"
+            "compat/dicom_tag.php",
+            "compat/dicom_convert.php"
         ]
     },
     "autoload-dev": {
