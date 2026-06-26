@@ -9,8 +9,8 @@
 // signatures, and return shapes are reproduced verbatim; house naming applies only
 // to the internal Compat\ShimContract helper this delegates to.
 //
-// This file grows over checkpoints 6d-6f: 6d adds the render/codec methods below;
-// the creation (jpg_to_dcm, pdf_to_dcm) and multiframe methods land later.
+// This file grows over checkpoints 6d-6f: 6d adds the render/codec methods, 6e the
+// creation methods (jpg_to_dcm, pdf_to_dcm), and 6f the multiframe_to_video shim.
 declare(strict_types=1);
 
 use Compat\ShimContract;
@@ -18,6 +18,8 @@ use DICOM\Compress;
 use DICOM\Compression;
 use DICOM\Convert;
 use DICOM\File;
+use DICOM\FrameTiming;
+use DICOM\VideoFormat;
 use DICOM\Windowing;
 
 /**
@@ -235,5 +237,54 @@ class dicom_convert
         );
 
         return $this->pdf_to_dcm($arr_info);
+    }
+
+    /**
+     * Assemble the multiframe image into a video at
+     * "{temp_dir}/{basename(file)}.{format}" and return that path. Only the mp4
+     * format is supported. The temp_dir is created if missing.
+     *
+     * One deliberate, safer-than-v1 change: $framerate is honored as a
+     * frames-per-second cine rate. v1 ignored its $framerate argument and always
+     * fed ffmpeg a fixed 10 fps input rate, so callers who passed a value got no
+     * effect; here the value takes effect.
+     *
+     * This is the narrow v1 surface -- format, framerate, and output directory
+     * only. DICOM\\Convert::toVideo() exposes the richer timing (seconds-per-frame,
+     * frame multiplier), scaling, quality, and windowing controls.
+     *
+     * @param string $format    output container; only 'mp4' is supported
+     * @param int    $framerate frames per second (v1 default 24)
+     * @param string $temp_dir  output directory (v1 default './video_temp')
+     * @return string the output path
+     */
+    public function multiframe_to_video($format = 'mp4', $framerate = 24, $temp_dir = './video_temp')
+    {
+        $format = (string) $format;
+        if (strtolower($format) !== 'mp4') {
+            throw new \InvalidArgumentException(
+                "multiframe_to_video(): only the 'mp4' format is supported, got '{$format}'."
+            );
+        }
+        $directory = (string) $temp_dir;
+        if (!is_dir($directory) && !mkdir($directory, 0775, true) && !is_dir($directory)) {
+            throw new \RuntimeException(
+                "multiframe_to_video(): could not create output directory '{$directory}'."
+            );
+        }
+        $out = rtrim($directory, '/') . '/' . basename((string) $this->file) . '.' . $format;
+
+        return ShimContract::run(
+            'multiframe_to_video() is deprecated; use DICOM\\Convert::toVideo() in new '
+            . 'code. Unlike v1, this honors $framerate (v1 ignored it and always used '
+            . '10 fps).',
+            function () use ($out, $framerate): string {
+                (new Convert(File::open((string) $this->file)))
+                    ->toVideo($out, FrameTiming::framesPerSecond((float) $framerate), VideoFormat::mp4());
+
+                return $out;
+            },
+            $out,
+        );
     }
 }
