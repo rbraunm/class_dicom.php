@@ -74,6 +74,51 @@ final class CompatShimTest extends TestCase
         ));
     }
 
+    public function testRunDerivesFailureValueFromClosureOnSoftenedFailure(): void
+    {
+        $result = $this->capture(static fn (): string => ShimContract::run(
+            'dep',
+            static function (): string {
+                throw new IOException('boom');
+            },
+            static fn (\Throwable $e): string => 'ERR:' . $e->getMessage(),
+        ));
+
+        $this->assertSame('ERR:boom', $result);
+        $this->assertCount(1, $this->noticesOf(E_USER_DEPRECATED));
+        $warnings = $this->noticesOf(E_USER_WARNING);
+        $this->assertCount(1, $warnings);
+        $this->assertStringContainsString('boom', $warnings[0][1]);
+    }
+
+    public function testRunDoesNotInvokeFailureClosureOnSuccess(): void
+    {
+        $result = $this->capture(static fn (): string => ShimContract::run(
+            'dep',
+            static fn (): string => 'ok',
+            static function (\Throwable $e): string {
+                throw new \RuntimeException('failure deriver must not run on success');
+            },
+        ));
+
+        $this->assertSame('ok', $result);
+    }
+
+    public function testRunReturnsCallableStringFailureValueVerbatim(): void
+    {
+        // 'strlen' is a valid callable string; the Closure check (not is_callable)
+        // must return it as-is rather than invoking it.
+        $result = $this->capture(static fn (): string => ShimContract::run(
+            'dep',
+            static function (): string {
+                throw new IOException('disk gone');
+            },
+            'strlen',
+        ));
+
+        $this->assertSame('strlen', $result);
+    }
+
     // ---- Execute ----------------------------------------------------------------
 
     public function testExecuteReturnsStdoutVerbatimWithoutTrim(): void

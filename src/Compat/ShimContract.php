@@ -56,9 +56,16 @@ final class ShimContract
      * propagates untouched: the softening is deliberately narrow, so a genuine
      * programming error still fails loud.
      *
+     * $onSoftenedFailure is the value returned on a softened failure -- or, for the
+     * shims whose v1 contract returns the error text itself (the dicom_net methods),
+     * a Closure that receives the caught exception and derives the value (typically
+     * its message). Detection is by Closure instance, not is_callable, so a string
+     * failure value (an output path, '') is always returned verbatim and never
+     * mistaken for a callback.
+     *
      * @template T
      * @param callable():T $delegate
-     * @param T $onSoftenedFailure
+     * @param T|\Closure(\Throwable):T $onSoftenedFailure
      * @return T
      */
     public static function run(string $notice, callable $delegate, mixed $onSoftenedFailure): mixed
@@ -69,7 +76,9 @@ final class ShimContract
         } catch (DICOMException | PACSException | ToolkitException $exception) {
             @trigger_error($exception->getMessage(), E_USER_WARNING);
 
-            return $onSoftenedFailure;
+            return $onSoftenedFailure instanceof \Closure
+                ? ($onSoftenedFailure)($exception)
+                : $onSoftenedFailure;
         }
     }
 
