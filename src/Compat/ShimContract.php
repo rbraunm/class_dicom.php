@@ -63,6 +63,14 @@ final class ShimContract
      * failure value (an output path, '') is always returned verbatim and never
      * mistaken for a callback.
      *
+     * A v2 \InvalidArgumentException is treated separately. v1 was procedural and
+     * never threw -- it passed the value on and returned whatever the tool produced
+     * -- so where v2 now validates strictly and would abort, the shim honors v1's
+     * non-fatal behavior (return the same v1-shaped value) and surfaces the rejection
+     * as an E_USER_DEPRECATED rather than an E_USER_WARNING, because it marks usage
+     * that is invalid in v2 going forward, not a runtime failure. The substrate stays
+     * fail-loud; only the compatibility layer softens.
+     *
      * @template T
      * @param callable():T $delegate
      * @param T|\Closure(\Throwable):T $onSoftenedFailure
@@ -76,10 +84,20 @@ final class ShimContract
         } catch (DICOMException | PACSException | ToolkitException $exception) {
             @trigger_error($exception->getMessage(), E_USER_WARNING);
 
-            return $onSoftenedFailure instanceof \Closure
-                ? ($onSoftenedFailure)($exception)
-                : $onSoftenedFailure;
+            return self::softenedValue($onSoftenedFailure, $exception);
+        } catch (\InvalidArgumentException $exception) {
+            @trigger_error($exception->getMessage(), E_USER_DEPRECATED);
+
+            return self::softenedValue($onSoftenedFailure, $exception);
         }
+    }
+
+    /** Resolve a softened-failure value: invoke a Closure deriver, else return verbatim. */
+    private static function softenedValue(mixed $onSoftenedFailure, \Throwable $exception): mixed
+    {
+        return $onSoftenedFailure instanceof \Closure
+            ? ($onSoftenedFailure)($exception)
+            : $onSoftenedFailure;
     }
 
     /**

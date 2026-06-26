@@ -119,6 +119,39 @@ final class CompatShimTest extends TestCase
         $this->assertSame('strlen', $result);
     }
 
+    public function testRunSoftensInvalidArgumentToDeprecationNotWarning(): void
+    {
+        $result = $this->capture(static fn (): string => ShimContract::run(
+            'method is deprecated',
+            static function (): string {
+                throw new \InvalidArgumentException('AE title must be 1 to 16 characters');
+            },
+            'fallback',
+        ));
+
+        $this->assertSame('fallback', $result);
+        // No warning -- a strict-validation rejection is surfaced as a deprecation.
+        $this->assertSame([], $this->noticesOf(E_USER_WARNING));
+        // Two deprecations: the method notice, plus the rejection message.
+        $deprecations = $this->noticesOf(E_USER_DEPRECATED);
+        $this->assertCount(2, $deprecations);
+        $this->assertStringContainsString('AE title must be 1 to 16 characters', $deprecations[1][1]);
+    }
+
+    public function testRunInvalidArgumentWithClosureDeriverReturnsMessage(): void
+    {
+        $result = $this->capture(static fn (): string => ShimContract::run(
+            'dep',
+            static function (): string {
+                throw new \InvalidArgumentException('port out of range');
+            },
+            static fn (\Throwable $e): string => $e->getMessage(),
+        ));
+
+        $this->assertSame('port out of range', $result);
+        $this->assertSame([], $this->noticesOf(E_USER_WARNING));
+    }
+
     // ---- Execute ----------------------------------------------------------------
 
     public function testExecuteReturnsStdoutVerbatimWithoutTrim(): void
