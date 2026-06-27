@@ -1,44 +1,54 @@
-#!/usr/bin/php
-<?PHP
-// See: http://deanvaughan.org/wordpress/2012/07/class_dicom-php-example-send-all-dicom-files-in-a-directory/
-require_once('class_dicom.php');
+#!/usr/bin/env php
+<?php
 
-# WHERE YOUR DICOM FILES ARE
-$temp_dir = '../temp';
+/**
+ * Migration example -- send every DICOM file in a directory, moving each sent file.
+ *
+ * Before (v1, via the deprecated shim): an opendir/readdir loop calling send_dcm()
+ * per file and renaming successes into a backup directory.
+ *
+ * After (v2-native): PACS\SCU::send() per file (one Peer/Association reused),
+ * keeping v1's move-on-success behavior. For a one-shot bulk send with no per-file
+ * tracking, $scu->sendDirectory($dir) sends the whole directory in one association.
+ */
 
-# WHERE YOU ARE SENDING THEM TO
-$target_host = 'kif.sxrmedical.com';
-$target_port = '105';
-$target_ae = 'BK';
-$my_ae = 'BK';
+declare(strict_types=1);
 
-if(!file_exists('bk')) {
-  mkdir('bk');
+require_once __DIR__ . '/../vendor/autoload.php';
+
+use DICOM\File;
+use PACS\Association;
+use PACS\Exception\NetworkException;
+use PACS\Peer;
+use PACS\SCU;
+
+$sourceDir = $argv[1] ?? '../temp';
+$backupDir = $argv[2] ?? 'bk';
+$host = $argv[3] ?? 'kif.sxrmedical.com';
+$port = (int) ($argv[4] ?? 105);
+
+if (!is_dir($sourceDir)) {
+    fwrite(STDERR, "USAGE: send_directory.php <SOURCE_DIR> [backup_dir] [host] [port]\n");
+    exit(1);
+}
+if (!is_dir($backupDir)) {
+    mkdir($backupDir, 0775, true);
 }
 
-$d = new dicom_net;
+$scu = new SCU(new Peer($host, $port, 'BK'), new Association('BK'));
 
-if($handle = opendir($temp_dir)) {
-  while(false !== ($file = readdir($handle))) {
-    if($file != "." && $file != "..") {
-
-      print "Sending $file...\n";
-
-      $d->file = "$temp_dir/$file";
-      $ret = $d->send_dcm($target_host, $target_port, $my_ae, $target_ae);
-      if($ret) {
-        print "Send Error: $ret\n";
+foreach (glob($sourceDir . '/*') ?: [] as $file) {
+    if (!is_file($file)) {
         continue;
-      }
-      else {
-        print "Good Send\n";
-        print "Moving $temp_dir/$file\n";
-        rename("$temp_dir/$file", "bk/$file");
-      }
-
     }
-  }
-  closedir($handle);
+    echo "Sending " . basename($file) . "...\n";
+    try {
+        $scu->send(File::open($file));
+        rename($file, $backupDir . '/' . basename($file));
+        echo "Good Send\n";
+    } catch (NetworkException $exception) {
+        echo "Send Error: " . $exception->getMessage() . "\n";
+    }
 }
 
-?>
+// One-call alternative (no per-file move): $scu->sendDirectory($sourceDir);
