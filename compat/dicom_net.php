@@ -19,6 +19,7 @@ use DICOM\File;
 use PACS\Association;
 use PACS\EchoSCU;
 use PACS\Peer;
+use PACS\SCP;
 use PACS\SCU;
 
 /**
@@ -117,6 +118,64 @@ class dicom_net
                 return 0;
             },
             static fn (\Throwable $exception): string => $exception->getMessage(),
+        );
+    }
+
+    /**
+     * Run a blocking C-STORE SCP (storescp) that receives objects into $storage_dir.
+     * $handler_script, if given, is run after each received object as a bare command
+     * with v1's placeholders appended -- "<handler> #p #f #c #a" (storage dir, file,
+     * called AE, calling AE) -- so it must be executable with a shebang. $config_file,
+     * if given, selects accepted presentation contexts (storescp -xf <file> Default);
+     * otherwise all transfer syntaxes are accepted. A truthy $debug adds -v -d.
+     *
+     * Server timeouts and the fork/host-lookup/blocking behavior come from the
+     * $server_*_timeout, $fork, $disable_host_lookup, and $blocking properties.
+     * Blocking (the default, matching v1) runs in the foreground until the process
+     * exits and returns null; non-blocking returns the SCPProcess handle.
+     *
+     * @return \PACS\SCPProcess|null the handle when non-blocking, otherwise null
+     */
+    public function store_server($port, $storage_dir, $handler_script, $config_file = '', $debug = 0)
+    {
+        $port = (int) $port;
+        $storage = (string) $storage_dir;
+        $handler = (string) $handler_script;
+        $config = (string) $config_file;
+        $acse = $this->server_acse_timeout;
+        $dimse = $this->server_dimse_timeout;
+        $fork = $this->fork;
+        $disableHostLookup = $this->disable_host_lookup;
+        $blocking = $this->blocking;
+
+        return ShimContract::run(
+            'store_server() is deprecated; use PACS\\SCP in new code.',
+            function () use ($port, $storage, $handler, $config, $debug, $acse, $dimse, $fork, $disableHostLookup, $blocking) {
+                if (!is_dir($storage) && !mkdir($storage, 0775, true) && !is_dir($storage)) {
+                    throw new \RuntimeException("store_server(): could not create storage directory '{$storage}'.");
+                }
+                $scp = new SCP(
+                    port: $port,
+                    outputDirectory: $storage,
+                    postReceiveCommand: $handler !== '' ? $handler . ' #p #f #c #a' : null,
+                    forkPerAssociation: $fork,
+                    presentationConfigFile: $config !== '' ? $config : null,
+                    debug: (bool) $debug,
+                    disableHostLookup: $disableHostLookup,
+                    acseTimeoutSeconds: $acse,
+                    dimseTimeoutSeconds: $dimse,
+                );
+                $process = $scp->start();
+                if (!$blocking) {
+                    return $process;
+                }
+                while ($process->isRunning()) {
+                    usleep(200000);
+                }
+
+                return null;
+            },
+            null,
         );
     }
 }

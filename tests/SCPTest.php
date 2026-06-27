@@ -127,4 +127,45 @@ final class SCPTest extends TestCase
         $this->assertSame($port, $handle->port());
         $this->assertSame($received, $handle->outputDirectory());
     }
+
+    public function testStartsWithPresentationConfigFile(): void
+    {
+        // A minimal storescp config whose "Default" profile accepts the sent object
+        // (ComputedRadiography, uncompressed), exercising the -xf <file> Default path.
+        $config = $this->tempDir() . '/scp.cfg';
+        file_put_contents($config, <<<CFG
+            [[TransferSyntaxes]]
+            [Uncompressed]
+            TransferSyntax1 = LittleEndianExplicit
+            TransferSyntax2 = LittleEndianImplicit
+
+            [[PresentationContexts]]
+            [StorageContexts]
+            PresentationContext1 = VerificationSOPClass\\Uncompressed
+            PresentationContext2 = ComputedRadiographyImageStorage\\Uncompressed
+
+            [[Profiles]]
+            [Default]
+            PresentationContexts = StorageContexts
+            CFG);
+
+        $received = $this->tempDir();
+        $port = $this->freePort();
+        $this->startScp(new SCP($port, $received, presentationConfigFile: $config));
+
+        $this->sendOneTo($port);
+        $this->assertSame(1, $this->waitForFileCount($received, 1));
+    }
+
+    public function testRejectsMissingPresentationConfigFile(): void
+    {
+        $this->expectException(IOException::class);
+        (new SCP($this->freePort(), $this->tempDir(), presentationConfigFile: '/no/such/scp.cfg'))->start();
+    }
+
+    public function testRejectsOutOfRangeTimeout(): void
+    {
+        $this->expectException(\InvalidArgumentException::class);
+        new SCP($this->freePort(), $this->tempDir(), acseTimeoutSeconds: 0);
+    }
 }

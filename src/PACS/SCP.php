@@ -17,10 +17,13 @@ use PACS\Exception\NetworkException;
  * background process -- start() launches storescp, waits until it is listening,
  * and returns an SCPProcess handle the caller stops when done.
  *
- * It accepts all supported transfer syntaxes (storescp +xa). An optional AE title
- * restricts who it answers as; an optional post-reception command is a shell
- * command storescp runs after each stored object (its shell-safety is the
- * caller's responsibility); fork-per-association lets it serve concurrent senders.
+ * By default it accepts all supported transfer syntaxes (storescp +xa); passing a
+ * presentation config file instead selects accepted contexts via storescp
+ * -xf <file> Default. An optional AE title restricts who it answers as; an optional
+ * post-reception command is a shell command storescp runs after each stored object
+ * (its shell-safety is the caller's responsibility); fork-per-association lets it
+ * serve concurrent senders. ACSE/DIMSE timeouts, reverse-DNS suppression (-dhl),
+ * and verbose/debug logging (-v -d) are optional.
  */
 final class SCP
 {
@@ -32,6 +35,11 @@ final class SCP
         private readonly ?string $aeTitle = null,
         private readonly ?string $postReceiveCommand = null,
         private readonly bool $forkPerAssociation = false,
+        private readonly ?string $presentationConfigFile = null,
+        private readonly bool $debug = false,
+        private readonly bool $disableHostLookup = false,
+        private readonly ?int $acseTimeoutSeconds = null,
+        private readonly ?int $dimseTimeoutSeconds = null,
         ?Toolkit $toolkit = null,
     ) {
         if ($this->port < 1 || $this->port > 65535) {
@@ -40,7 +48,16 @@ final class SCP
         if ($this->aeTitle !== null) {
             Peer::assertAETitle($this->aeTitle, 'SCP AE title');
         }
+        self::assertTimeout($this->acseTimeoutSeconds, 'SCP ACSE timeout');
+        self::assertTimeout($this->dimseTimeoutSeconds, 'SCP DIMSE timeout');
         $this->toolkit = $toolkit ?? new Toolkit();
+    }
+
+    private static function assertTimeout(?int $seconds, string $label): void
+    {
+        if ($seconds !== null && $seconds < 1) {
+            throw new \InvalidArgumentException("{$label} must be >= 1 second when set, got {$seconds}.");
+        }
     }
 
     /**
@@ -58,6 +75,11 @@ final class SCP
         if (!is_writable($this->outputDirectory)) {
             throw new IOException("SCP output directory is not writable: '{$this->outputDirectory}'.");
         }
+        if ($this->presentationConfigFile !== null && !is_file($this->presentationConfigFile)) {
+            throw new IOException(
+                "SCP presentation config file does not exist: '{$this->presentationConfigFile}'.",
+            );
+        }
         $process = Tool::spawn($this->toolkit, 'storescp', $this->buildArgv());
         $this->awaitListening($process);
 
@@ -67,10 +89,36 @@ final class SCP
     /** @return list<string> */
     private function buildArgv(): array
     {
-        $argv = ['-od', $this->outputDirectory, '+xa'];
+        $argv = [];
+        if ($this->debug) {
+            $argv[] = '-v';
+            $argv[] = '-d';
+        }
+        $argv[] = '-od';
+        $argv[] = $this->outputDirectory;
+        // A presentation config selects accepted contexts (storescp -xf <file> Default);
+        // without one, accept all supported transfer syntaxes (+xa).
+        if ($this->presentationConfigFile !== null) {
+            $argv[] = '-xf';
+            $argv[] = $this->presentationConfigFile;
+            $argv[] = 'Default';
+        } else {
+            $argv[] = '+xa';
+        }
         if ($this->aeTitle !== null) {
             $argv[] = '-aet';
             $argv[] = $this->aeTitle;
+        }
+        if ($this->disableHostLookup) {
+            $argv[] = '-dhl';
+        }
+        if ($this->acseTimeoutSeconds !== null) {
+            $argv[] = '-ta';
+            $argv[] = (string) $this->acseTimeoutSeconds;
+        }
+        if ($this->dimseTimeoutSeconds !== null) {
+            $argv[] = '-td';
+            $argv[] = (string) $this->dimseTimeoutSeconds;
         }
         if ($this->forkPerAssociation) {
             $argv[] = '--fork';

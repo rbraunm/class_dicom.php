@@ -5,6 +5,11 @@ declare(strict_types=1);
 
 namespace DICOM\Tests;
 
+use DICOM\File;
+use PACS\Association;
+use PACS\Peer;
+use PACS\SCPProcess;
+use PACS\SCU;
 use PACS\Tests\StartsStoreScp;
 use PHPUnit\Framework\TestCase;
 
@@ -26,6 +31,9 @@ final class CompatDicomNetTest extends TestCase
     /** @var list<string> */
     private array $tempDirs = [];
 
+    /** @var list<SCPProcess> */
+    private array $startedHandles = [];
+
     private const FIXTURES = __DIR__ . '/fixtures';
 
     protected function setUp(): void
@@ -38,6 +46,10 @@ final class CompatDicomNetTest extends TestCase
 
     protected function tearDown(): void
     {
+        foreach ($this->startedHandles as $handle) {
+            $handle->stop();
+        }
+        $this->startedHandles = [];
         $this->stopStoreScpPeers();
         foreach (array_merge([$this->recv], $this->tempDirs) as $directory) {
             foreach (glob($directory . '/*') ?: [] as $file) {
@@ -51,6 +63,15 @@ final class CompatDicomNetTest extends TestCase
     private function countReceived(): int
     {
         return count(glob($this->recv . '/*') ?: []);
+    }
+
+    private function tempDir(): string
+    {
+        $dir = sys_get_temp_dir() . '/netshim' . bin2hex(random_bytes(6));
+        mkdir($dir, 0775, true);
+        $this->tempDirs[] = $dir;
+
+        return $dir;
     }
 
     private function settleReceived(int $want, float $seconds = 4.0): void
@@ -172,5 +193,115 @@ final class CompatDicomNetTest extends TestCase
         $this->assertStringContainsString('ACSE timeout', $result);
         $this->assertSame([], $this->noticesOf(E_USER_WARNING));
         $this->assertCount(2, $this->noticesOf(E_USER_DEPRECATED));
+    }
+
+    private function sendObject(int $port, string $callingAE, string $calledAE, string $fixture): void
+    {
+        (new SCU(new Peer('127.0.0.1', $port, $calledAE), new Association($callingAE)))
+            ->send(File::open($fixture));
+    }
+
+    /** Write an executable handler that logs each placeholder it receives, one per line. */
+    private function writeHandler(string $log): string
+    {
+        $path = dirname($log) . '/handler.sh';
+        file_put_contents($path, "#!/bin/sh\nprintf '%s\\n' \"\$@\" >> " . escapeshellarg($log) . "\n");
+        chmod($path, 0755);
+
+        return $path;
+    }
+
+    public function testStoreServerRunsHandlerWithPlaceholders(): void
+    {
+        $recv = $this->tempDir();
+        $log = $this->tempDir() . '/handler.log';
+        $handler = $this->writeHandler($log);
+        $port = $this->freePort();
+
+        $net = new \dicom_net();
+        $net->blocking = false; // return the handle instead of blocking
+        $handle = $this->capture(fn (): mixed => $net->store_server($port, $recv, $handler));
+
+        $this->assertInstanceOf(SCPProcess::class, $handle);
+        $this->startedHandles[] = $handle;
+        $this->assertCount(1, $this->noticesOf(E_USER_DEPRECATED));
+
+        $this->sendObject($port, 'SENDERAE', 'RECVRAE', self::FIXTURES . '/implicit_vr_le.dcm');
+
+        $args = [];
+        $deadline = microtime(true) + 6.0;
+        while (microtime(true) < $deadline) {
+            $args = is_file($log)
+                ? array_values(array_filter(explode("\n", (string) file_get_contents($log)), 'strlen'))
+                : [];
+            if (count($args) >= 4) {
+                break;
+            }
+            usleep(100000);
+        }
+
+        $this->assertCount(4, $args, 'handler did not run with the four placeholders');
+        // v1 placeholder order #p #f #c #a: storage dir, stored file, called AE (us), calling AE (sender).
+        $this->assertSame(realpath($recv), realpath($args[0]));
+        $this->assertFileExists($args[0] . '/' . $args[1]);
+        $this->assertSame('RECVRAE', $args[2]);
+        $this->assertSame('SENDERAE', $args[3]);
+    }
+
+    public function testStoreServerSoftensStartupFailure(): void
+    {
+        $port = $this->freePort();
+        $occupier = (new \PACS\SCP($port, $this->tempDir()))->start();
+        $this->startedHandles[] = $occupier;
+
+        $net = new \dicom_net();
+        $net->blocking = false;
+        $result = $this->capture(fn (): mixed => $net->store_server($port, $this->tempDir(), ''));
+
+        $this->assertNull($result);
+        $this->assertCount(1, $this->noticesOf(E_USER_WARNING));
+        $this->assertCount(1, $this->noticesOf(E_USER_DEPRECATED));
+    }
+
+    public function testStoreServerBlocksUntilStopped(): void
+    {
+        foreach (['pcntl_fork', 'pcntl_waitpid', 'posix_setsid', 'posix_kill'] as $fn) {
+            if (!function_exists($fn)) {
+                $this->markTestSkipped("requires {$fn}");
+            }
+        }
+
+        $port = $this->freePort();
+        $recv = $this->tempDir();
+
+        $pid = pcntl_fork();
+        $this->assertNotSame(-1, $pid, 'fork failed');
+        if ($pid === 0) {
+            // Child: new session so the whole group (php child + storescp) can be reaped
+            // together. Default blocking=true means store_server never returns here.
+            posix_setsid();
+            $net = new \dicom_net();
+            @$net->store_server($port, $recv, '');
+            exit(0);
+        }
+
+        $up = false;
+        $deadline = microtime(true) + 5.0;
+        while (microtime(true) < $deadline) {
+            $client = @stream_socket_client("tcp://127.0.0.1:{$port}", $errno, $errstr, 0.2);
+            if ($client !== false) {
+                fclose($client);
+                $up = true;
+                break;
+            }
+            usleep(100000);
+        }
+
+        $this->assertTrue($up, 'blocking store_server never started listening');
+        // Still blocked (not returned) -> the child has not exited.
+        $this->assertSame(0, pcntl_waitpid($pid, $status, WNOHANG), 'store_server returned instead of blocking');
+
+        posix_kill(-$pid, SIGKILL); // kill the child's whole session (php child + storescp)
+        pcntl_waitpid($pid, $status);
     }
 }
