@@ -157,4 +157,20 @@ final class CompatDicomNetTest extends TestCase
         $this->assertSame(0, $this->countReceived());
         $this->assertCount(1, $this->noticesOf(E_USER_WARNING));
     }
+
+    public function testEchoscuConfiguredTimeoutReachesAssociation(): void
+    {
+        // An out-of-range timeout proves the property is passed through to
+        // Association (which rejects < 1); the rejection softens per the contract.
+        $net = new \dicom_net();
+        $net->echo_acse_timeout = 0;
+
+        $result = $this->capture(fn (): mixed => $net
+            ->echoscu('127.0.0.1', $this->port, 'ECHOSCU', 'ECHOSCP'));
+
+        $this->assertIsString($result);
+        $this->assertStringContainsString('ACSE timeout', $result);
+        $this->assertSame([], $this->noticesOf(E_USER_WARNING));
+        $this->assertCount(2, $this->noticesOf(E_USER_DEPRECATED));
+    }
 }

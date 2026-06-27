@@ -41,6 +41,26 @@ class dicom_net
     /** @var string Path to the DICOM file send_dcm() transmits; set by the caller. */
     public $file = '';
 
+    // Tunable timeouts and flags mirroring DCMTK's per-tool knobs. Defaults match
+    // v1's hardcoded values; set any property before a call to override.
+    /** echoscu ACSE / DIMSE / TCP-connection timeouts in seconds (echoscu -ta/-td/-to). */
+    public int $echo_acse_timeout = 5;
+    public int $echo_dimse_timeout = 5;
+    public int $echo_connection_timeout = 5;
+    /** send_dcm ACSE / DIMSE / TCP-connection timeouts in seconds (storescu -ta/-td/-to). */
+    public int $send_acse_timeout = 10;
+    public int $send_dimse_timeout = 10;
+    public int $send_connection_timeout = 10;
+    /** store_server ACSE / DIMSE timeouts in seconds (storescp -ta/-td). */
+    public int $server_acse_timeout = 20;
+    public int $server_dimse_timeout = 20;
+    /** store_server: handle concurrent associations (storescp --fork). */
+    public bool $fork = true;
+    /** store_server: skip reverse-DNS lookup of the peer (storescp -dhl). */
+    public bool $disable_host_lookup = true;
+    /** store_server: block until the server process exits (v1 ran in the foreground). */
+    public bool $blocking = true;
+
     /**
      * C-ECHO (DICOM verification "ping") to $host:$port. Returns 0 on success or the
      * error output string on failure. $my_ae is the calling AE, $target_ae the called.
@@ -49,11 +69,16 @@ class dicom_net
      */
     public function echoscu($host, $port, $my_ae, $target_ae)
     {
+        $acse = $this->echo_acse_timeout;
+        $dimse = $this->echo_dimse_timeout;
+        $connection = $this->echo_connection_timeout;
+
         return ShimContract::run(
             'echoscu() is deprecated; use PACS\\EchoSCU in new code.',
-            function () use ($host, $port, $my_ae, $target_ae): int {
+            function () use ($host, $port, $my_ae, $target_ae, $acse, $dimse, $connection): int {
                 $peer = new Peer((string) $host, (int) $port, (string) $target_ae);
-                (new EchoSCU($peer, new Association((string) $my_ae)))->verify();
+                $association = new Association((string) $my_ae, $acse, $dimse, $connection);
+                (new EchoSCU($peer, $association))->verify();
 
                 return 0;
             },
@@ -72,13 +97,16 @@ class dicom_net
     public function send_dcm($host, $port, $my_ae, $target_ae, $batch = 0)
     {
         $file = (string) $this->file;
+        $acse = $this->send_acse_timeout;
+        $dimse = $this->send_dimse_timeout;
+        $connection = $this->send_connection_timeout;
 
         return ShimContract::run(
             'send_dcm() is deprecated; use PACS\\SCU::send()/sendDirectory() in new code.',
-            function () use ($host, $port, $my_ae, $target_ae, $batch, $file): int {
+            function () use ($host, $port, $my_ae, $target_ae, $batch, $file, $acse, $dimse, $connection): int {
                 $scu = new SCU(
                     new Peer((string) $host, (int) $port, (string) $target_ae),
-                    new Association((string) $my_ae),
+                    new Association((string) $my_ae, $acse, $dimse, $connection),
                 );
                 if ($batch) {
                     $scu->sendDirectory(dirname($file));
