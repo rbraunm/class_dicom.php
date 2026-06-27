@@ -195,6 +195,25 @@ final class CompatDicomNetTest extends TestCase
         $this->assertCount(2, $this->noticesOf(E_USER_DEPRECATED));
     }
 
+    public function testTransferSyntaxIsInertButDeprecated(): void
+    {
+        $net = new \dicom_net();
+        $net->file = self::FIXTURES . '/implicit_vr_le.dcm';
+        $net->transfer_syntax = '1.2.840.10008.1.2.1'; // ignored, exactly as in v1
+
+        $result = $this->capture(fn (): mixed => $net
+            ->send_dcm('127.0.0.1', $this->port, 'SENDSCU', 'ECHOSCP'));
+
+        $this->assertSame(0, $result);
+        $this->assertSame(1, $this->countReceived());
+        // send_dcm's own deprecation plus the transfer_syntax-ignored one.
+        $messages = array_map(fn (array $n): string => $n[1], $this->noticesOf(E_USER_DEPRECATED));
+        $this->assertCount(2, $messages);
+        $this->assertNotEmpty(
+            array_filter($messages, static fn (string $m): bool => str_contains($m, 'transfer_syntax')),
+        );
+    }
+
     private function sendObject(int $port, string $callingAE, string $calledAE, string $fixture): void
     {
         (new SCU(new Peer('127.0.0.1', $port, $calledAE), new Association($callingAE)))

@@ -42,6 +42,14 @@ class dicom_net
     /** @var string Path to the DICOM file send_dcm() transmits; set by the caller. */
     public $file = '';
 
+    /**
+     * @var mixed Accepted for v1 compatibility but inert, exactly as in v1: v1 read
+     * this property but never applied it to storescu. For real transfer-syntax
+     * negotiation use PACS\TransferSyntaxProposal with PACS\SCU. send_dcm() emits a
+     * deprecation if this is set to a non-empty value.
+     */
+    public $transfer_syntax = '';
+
     // Tunable timeouts and flags mirroring DCMTK's per-tool knobs. Defaults match
     // v1's hardcoded values; set any property before a call to override.
     /** echoscu ACSE / DIMSE / TCP-connection timeouts in seconds (echoscu -ta/-td/-to). */
@@ -64,11 +72,11 @@ class dicom_net
 
     /**
      * C-ECHO (DICOM verification "ping") to $host:$port. Returns 0 on success or the
-     * error output string on failure. $my_ae is the calling AE, $target_ae the called.
+     * error output string on failure. $my_ae is the calling AE, $remote_ae the called.
      *
      * @return int|string 0 on success, error string on failure
      */
-    public function echoscu($host, $port, $my_ae, $target_ae)
+    public function echoscu($host, $port, $my_ae = 'DEANO', $remote_ae = 'DEANO')
     {
         $acse = $this->echo_acse_timeout;
         $dimse = $this->echo_dimse_timeout;
@@ -76,8 +84,8 @@ class dicom_net
 
         return ShimContract::run(
             'echoscu() is deprecated; use PACS\\EchoSCU in new code.',
-            function () use ($host, $port, $my_ae, $target_ae, $acse, $dimse, $connection): int {
-                $peer = new Peer((string) $host, (int) $port, (string) $target_ae);
+            function () use ($host, $port, $my_ae, $remote_ae, $acse, $dimse, $connection): int {
+                $peer = new Peer((string) $host, (int) $port, (string) $remote_ae);
                 $association = new Association((string) $my_ae, $acse, $dimse, $connection);
                 (new EchoSCU($peer, $association))->verify();
 
@@ -95,21 +103,28 @@ class dicom_net
      *
      * @return int|string 0 on success, error string on failure
      */
-    public function send_dcm($host, $port, $my_ae, $target_ae, $batch = 0)
+    public function send_dcm($host, $port, $my_ae = 'DEANO', $remote_ae = 'DEANO', $send_batch = 0)
     {
         $file = (string) $this->file;
         $acse = $this->send_acse_timeout;
         $dimse = $this->send_dimse_timeout;
         $connection = $this->send_connection_timeout;
 
+        if ((string) $this->transfer_syntax !== '') {
+            ShimContract::deprecate(
+                'dicom_net::$transfer_syntax is ignored (as in v1); use '
+                . 'PACS\TransferSyntaxProposal with PACS\SCU for transfer-syntax control.',
+            );
+        }
+
         return ShimContract::run(
             'send_dcm() is deprecated; use PACS\\SCU::send()/sendDirectory() in new code.',
-            function () use ($host, $port, $my_ae, $target_ae, $batch, $file, $acse, $dimse, $connection): int {
+            function () use ($host, $port, $my_ae, $remote_ae, $send_batch, $file, $acse, $dimse, $connection): int {
                 $scu = new SCU(
-                    new Peer((string) $host, (int) $port, (string) $target_ae),
+                    new Peer((string) $host, (int) $port, (string) $remote_ae),
                     new Association((string) $my_ae, $acse, $dimse, $connection),
                 );
-                if ($batch) {
+                if ($send_batch) {
                     $scu->sendDirectory(dirname($file));
                 } else {
                     $scu->send(File::open($file));
@@ -136,10 +151,10 @@ class dicom_net
      *
      * @return \PACS\SCPProcess|null the handle when non-blocking, otherwise null
      */
-    public function store_server($port, $storage_dir, $handler_script, $config_file = '', $debug = 0)
+    public function store_server($port, $dcm_dir, $handler_script, $config_file = '', $debug = 0)
     {
         $port = (int) $port;
-        $storage = (string) $storage_dir;
+        $storage = (string) $dcm_dir;
         $handler = (string) $handler_script;
         $config = (string) $config_file;
         $acse = $this->server_acse_timeout;
