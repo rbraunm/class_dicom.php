@@ -103,7 +103,7 @@ use DICOM\Compress;
 use DICOM\Compression;
 
 $source = File::open('/path/to/image.dcm');
-$compressed = (new Compress($source))->compress('/tmp/compressed.dcm', Compression::lossless());
+$compressed = (new Compress($source))->compress('/tmp/compressed.dcm', Compression::losslessSV1());
 $plain      = (new Compress($source))->decompress('/tmp/uncompressed.dcm');
 
 echo $compressed->transferSyntaxUID();   // e.g. 1.2.840.10008.1.2.4.70

@@ -11,7 +11,7 @@
  *     $c = new dicom_convert; $c->file = $file; $c->compress('compressed.dcm');
  *
  * After (v2-native): DICOM\Compress, and File::transferSyntaxUID() instead of a raw
- * address. The default mode is lossless, matching v1.
+ * address. The default mode is lossless SV1, matching v1.
  */
 
 declare(strict_types=1);
@@ -32,6 +32,6 @@ $source = File::open($path);
 echo 'Original:   ' . $source->transferSyntaxUID() . ' (' . filesize($path) . " bytes)\n";
 
 $out = sys_get_temp_dir() . '/compressed.dcm';
-$result = (new Compress($source))->compress($out, Compression::lossless());
+$result = (new Compress($source))->compress($out, Compression::losslessSV1());
 
 echo 'Compressed: ' . $result->transferSyntaxUID() . ' (' . filesize($out) . " bytes)\n";
