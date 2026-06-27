@@ -1,244 +1,235 @@
 # class_dicom.php
 
-A PHP library for working with DICOM medical images. Handles tag reading and writing, JPEG conversion, compression, and DICOM networking (C-ECHO, C-STORE send and receive) by wrapping the [DCMTK](https://dicom.offis.de/dcmtk.php.en) command-line toolkit.
+A PHP library for working with DICOM medical images: tag reading and writing, JPEG conversion, compression, multiframe-to-video, and DICOM networking (C-ECHO, C-STORE send and receive). It drives the [DCMTK](https://dicom.offis.de/dcmtk.php.en) command-line toolkit under a typed, namespaced PHP API.
+
+Version 2 is a clean-room rewrite on PHP 8.5 with a first-class object API (`DICOM\*`, `PACS\*`) and value objects for dates, names, and UIDs. The original procedural surface (`dicom_tag`, `dicom_convert`, `dicom_net`, and the global helpers) is preserved as a compatibility shim so v1 code keeps running unchanged -- it now emits deprecation notices pointing at the v2 equivalents. See [Migrating from v1](#migrating-from-v1).
 
 Originally created by Dean Vaughan ([deanvaughan.org](http://www.deanvaughan.org/projects/class_dicom_php/)).
 
 ## Requirements
 
-- PHP 8.0 or later (CLI or web)
-- [DCMTK](https://dicom.offis.de/dcmtk.php.en) command-line utilities installed and accessible
-
-By default the library looks for DCMTK binaries in `/usr/local/bin`. If your installation is elsewhere, edit the `TOOLKIT_DIR` constant at the top of `class_dicom.php`.
+- PHP 8.5 or later (CLI or web)
+- [DCMTK](https://dicom.offis.de/dcmtk.php.en) command-line utilities on `PATH`
+- `ffmpeg` (only for multiframe-to-video)
 
 On Debian/Ubuntu:
 
 ```bash
-apt install php-cli dcmtk
+apt install php-cli dcmtk ffmpeg
+```
+
+DCMTK tools are resolved from `PATH` by default. If your installation lives elsewhere, construct a `DCMTK\Toolkit` with the directory and hand it to whichever object you use (every entry point accepts an optional `Toolkit`):
+
+```php
+use DCMTK\Toolkit;
+use DICOM\File;
+
+$toolkit = new Toolkit('/opt/dcmtk/bin');
+$file = File::open('/path/to/image.dcm', $toolkit);
 ```
 
 ## Installation
-
-### Composer
 
 ```bash
 composer require rbraunm/class_dicom
 ```
 
-### Manual
+Then load Composer's autoloader (`require __DIR__ . '/vendor/autoload.php';`). There is no single file to copy -- the library is autoloaded.
 
-Copy `class_dicom.php` into your project and require it directly:
+## Quick start
+
+### Reading tags
 
 ```php
-require_once('class_dicom.php');
+use DICOM\File;
+use DICOM\Tag;
+
+$file = File::open('/path/to/image.dcm');
+
+// Typed accessors, keyed by the Tag enum -- validated values, not raw strings.
+$patient  = $file->getPersonName(Tag::PatientName)?->toDICOM();
+$modality = $file->getText(Tag::Modality);
+$study    = $file->getDate(Tag::StudyDate)?->iso();
+$sopUid   = $file->getUID(Tag::SOPInstanceUID)?->value;
+
+// The full tag map, keyed "gggg,eeee":
+$all = $file->dataset()->all();
+
+// A tag with no typed accessor, by raw address:
+$rows = $file->dataset()->get(0x0028, 0x0010);
 ```
 
-## Usage
+### Writing tags
 
-### Reading DICOM tags
+Typed setters take validated value objects and persist in place:
 
 ```php
-$d = new dicom_tag('/path/to/image.dcm');
-$patient_name = $d->get_tag('0010', '0010');
-$modality     = $d->get_tag('0008', '0060');
+use DICOM\Value\PersonName;
 
-// All loaded tags are available in $d->tags as an associative array
-// keyed by "group,element" (e.g. "0010,0010")
+$file->setPersonName(Tag::PatientName, PersonName::fromDICOM('DOE^JOHN'));
+$file->setText(Tag::InstitutionName, 'General Hospital');
+
+// Raw write for a tag without a typed setter:
+(new DICOM\Dataset('/path/to/image.dcm'))->put(0x0010, 0x0010, 'DOE^JOHN');
 ```
 
-The constructor calls `load_tags()` automatically if the file exists and passes the `is_dcm()` check. Tags can also be loaded manually:
+### DICOM to JPEG
 
 ```php
-$d = new dicom_tag;
-$d->file = '/path/to/image.dcm';
-$d->load_tags();
+use DICOM\Convert;
+
+$convert = new Convert(File::open('/path/to/image.dcm'));
+$convert->toJPEG('/tmp/image.jpg', quality: 90);     // windowing defaults to the first VOI window
+$convert->toThumbnail('/tmp/image_tn.jpg', widthPixels: 200);
 ```
 
-### Writing DICOM tags
+### JPEG to DICOM
+
+`Convert::fromJpeg()` builds a Secondary Capture object and generates the study, series, and SOP UIDs; fill identifying tags with typed setters afterward. No XML template is required.
 
 ```php
-$d = new dicom_tag('/path/to/image.dcm');
-$d->write_tags([
-    '0010,0010' => 'DOE^JOHN',
-    '0008,0080' => 'General Hospital',
-]);
+use DICOM\Value\Date;
+
+$file = Convert::fromJpeg(['/path/to/photo.jpg'], '/tmp/out.dcm');
+$file->setPersonName(Tag::PatientName, PersonName::fromDICOM('DOE^JOHN'));
+$file->setText(Tag::PatientID, 'PATIENT001');
+$file->setDate(Tag::PatientBirthDate, Date::fromYearMonthDay(1970, 1, 1));
 ```
 
-This modifies the file in place using `dcmodify`.
-
-### Converting DICOM to JPEG
+### Compression
 
 ```php
-$c = new dicom_convert('/path/to/image.dcm');
+use DICOM\Compress;
+use DICOM\Compression;
 
-// Full-size JPEG
-$c->jpg_quality = 90;  // 0-100, default 100
-$jpg_path = $c->dcm_to_jpg();
+$source = File::open('/path/to/image.dcm');
+$compressed = (new Compress($source))->compress('/tmp/compressed.dcm', Compression::lossless());
+$plain      = (new Compress($source))->decompress('/tmp/uncompressed.dcm');
 
-// Thumbnail
-$c->tn_size = 200;  // width in pixels, default 125
-$tn_path = $c->dcm_to_tn();
+echo $compressed->transferSyntaxUID();   // e.g. 1.2.840.10008.1.2.4.70
 ```
 
-### Compression and decompression
+### Multiframe to video
 
 ```php
-$c = new dicom_convert('/path/to/image.dcm');
+use DICOM\FrameTiming;
+use DICOM\VideoFormat;
 
-// Decompress to a new file (or omit the argument to overwrite)
-$c->uncompress('/path/to/output.dcm');
-
-// JPEG lossless compress
-$c->compress('/path/to/compressed.dcm');
+$convert = new Convert(File::open('/path/to/multiframe.dcm'));
+$convert->toVideo('/tmp/clip.mp4', FrameTiming::framesPerSecond(24.0), VideoFormat::mp4());
 ```
 
-### Converting JPEG to DICOM
-
-> **Known issue:** `jpg_to_dcm()` treats any output from `xml2dcm` as a fatal error. The bundled XML template (`examples/jpg_to_dcm.xml`) produces a SOPInstanceUID mismatch warning on current DCMTK versions, which causes the function to return early without embedding pixel data. The resulting file is a valid DICOM header but contains no image. This will be fixed in v2.0.0.
-
-The intended usage (once fixed) follows the pattern in `examples/jpg_to_dcm.php`:
+### Networking
 
 ```php
-$c = new dicom_convert;
-$c->jpg_file  = '/path/to/photo.jpg';
-$c->template  = '/path/to/jpg_to_dcm.xml';  // see examples/jpg_to_dcm.xml
-$c->temp_dir  = '/tmp/dcm_temp';
+use DICOM\File;
+use PACS\Association;
+use PACS\EchoSCU;
+use PACS\Peer;
+use PACS\SCP;
+use PACS\SCU;
+use PACS\TransferSyntaxProposal;
 
-$dcm_path = $c->jpg_to_dcm([
-    '0008,0012' => date('Ymd'),
-    '0008,0013' => date('Gis'),
-    '0008,0050' => 'ACCESSION123',
-    '0008,0080' => 'General Hospital',
-    '0008,0090' => 'Dr. Smith',
-    '0008,1030' => 'Study Description',
-    '0008,103e' => 'Series Description',
-    '0010,0010' => 'DOE^JOHN',
-    '0010,0020' => 'PATIENT001',
-    '0010,0030' => '19700101',
-    '0010,0040' => 'M',
-    '0010,21b0' => 'Patient History',
-    '0010,4000' => 'Patient Comments',
-    '0018,0015' => 'Head',
-    '0020,000d' => '1.3.51.0.7.2822962297.26312.19209.44846.7354.10266.42',
-    '0020,000e' => '1.3.51.5156.4083.' . date('Ymd') . '.42',
-    '0020,0011' => '1',
-    '0020,0012' => '1',
-    '0020,0013' => '1',
-]);
-```
+$peer = new Peer('192.168.1.100', 104, 'REMOTE_AE');   // host, port, called AE
+$association = new Association('MY_AE');                 // calling AE
 
-The tag keys must match the `(group,element)` placeholders in the XML template. See `examples/jpg_to_dcm.php` for the full tag mapping.
+// C-ECHO (verification) -- throws PACS\Exception\NetworkException on failure.
+(new EchoSCU($peer, $association))->verify();
 
-### Multiframe DICOM to video
+// C-STORE send. Pass a TransferSyntaxProposal to control negotiation.
+$scu = new SCU($peer, $association, TransferSyntaxProposal::jpegLossless());
+$scu->send(File::open('/path/to/image.dcm'));
+$scu->sendDirectory('/path/to/dir');
 
-```php
-$c = new dicom_convert('/path/to/multiframe.dcm');
-$video_path = $c->multiframe_to_video('mp4', 24, '/tmp/video_temp');
-```
-
-Requires `ffmpeg` on the system.
-
-### DICOM networking
-
-```php
-$n = new dicom_net;
-
-// C-ECHO (DICOM ping)
-$result = $n->echoscu('192.168.1.100', 104, 'MY_AE', 'REMOTE_AE');
-// Returns 0 on success, error output string on failure
-
-// C-STORE send (single file)
-$n->file = '/path/to/image.dcm';
-$n->send_dcm('192.168.1.100', 104, 'MY_AE', 'REMOTE_AE');
-
-// C-STORE send (batch -- all files in the same directory)
-$n->file = '/path/to/image.dcm';
-$n->send_dcm('192.168.1.100', 104, 'MY_AE', 'REMOTE_AE', 1);
-
-// C-STORE receive (blocking -- starts a DICOM listener)
-$n->store_server(
-    11112,                              // port
-    '/var/dicom/incoming',              // storage directory
-    '/path/to/handler_script.php',      // called after each file received
-    '/path/to/store_server_config.cfg', // storescp config
+// C-STORE receive. start() returns a handle; loop for a foreground server.
+$scp = new SCP(
+    port: 11112,
+    outputDirectory: '/var/dicom/incoming',
+    postReceiveCommand: '/path/to/handler.php #p #f #c #a',   // dir, file, called AE, calling AE
+    forkPerAssociation: true,
+    presentationConfigFile: '/path/to/store_server_config.cfg',
 );
-```
-
-See `examples/store_server.php`, `examples/store_server_handler.php`, and `examples/store_server_config.cfg` for a working receive setup.
-
-### Utility functions
-
-```php
-// Check if a file is valid DICOM
-if (is_dcm('/path/to/file')) {
-    // it's DICOM
+$process = $scp->start();
+while ($process->isRunning()) {
+    sleep(1);
 }
 ```
 
+## Migrating from v1
+
+Existing v1 code runs unchanged against the compatibility shim, which emits deprecation notices:
+
+```php
+$d = new dicom_tag('/path/to/image.dcm');   // deprecated; use DICOM\File
+$d->load_tags();
+$name = $d->get_tag('0010', '0010');
+```
+
+The `examples/` directory contains a worked migration for every operation: each script shows the v1 form as a "Before" block and the runnable v2-native "After" that bypasses the shim. A full element-by-element mapping lives in [`docs/migration-v1-to-v2.md`](docs/migration-v1-to-v2.md).
+
+A few migration notes:
+
+- v1's raw `'gggg,eeee'` addresses were only necessary because v1 had no typed access. Prefer the typed accessors; the raw `Dataset` get/put remains for tags without one.
+- v1's `jpg_to_dcm()` XML template is gone -- `Convert::fromJpeg()` generates the UIDs and typed setters supply the tags.
+- `dicom_net::$transfer_syntax` was inert in v1 (it set nothing); the shim keeps it inert and warns. Use `PACS\TransferSyntaxProposal` with `PACS\SCU` for real negotiation.
+
 ## Testing
 
-The test suite uses PHP + DCMTK for the code under test and Python for independent validation. This ensures DICOM files produced by the library are verified by a completely separate implementation, not just read back by the same tools that wrote them.
-
-### Test dependencies
+The suite runs under PHPUnit, with independent oracles (pydicom and pynetdicom) validating that files the library produces are correct when read by a separate implementation -- not just round-tripped through the same tools that wrote them.
 
 ```bash
 # System packages
-apt install php-cli dcmtk
+apt install php-cli dcmtk ffmpeg
 
-# Python packages
+# Python oracle packages
 pip install pydicom pynetdicom Pillow numpy
+
+composer install
+composer test
 ```
-
-### Running tests
-
-```bash
-python3 tests/test_class_dicom.py
-```
-
-The test runner exercises every public method against real DICOM files:
-
-- Tag reads are cross-validated against pydicom
-- Tag writes are confirmed by both PHP re-read and pydicom
-- JPEG conversions are validated with Pillow (magic bytes, full decode, dimension matching)
-- Compress/uncompress cycles verify transfer syntax changes, demographic preservation, and pixel data integrity
-- Network operations run against a pynetdicom SCP that confirms C-ECHO events server-side and validates C-STORE round-trips down to pixel-level array equality
 
 ## API reference
 
-### Classes
+### v2 API
 
-| Class | Purpose |
-|-------|---------|
-| `dicom_tag` | Read and write DICOM tags via dcmdump/dcmodify |
-| `dicom_convert` | Image format conversion, compression, thumbnails |
-| `dicom_net` | DICOM networking: C-ECHO, C-STORE SCU/SCP |
+| Namespace / class | Purpose |
+|---|---|
+| `DICOM\File` | Open a file; typed get/set accessors keyed by the `Tag` enum |
+| `DICOM\Dataset` | Raw tag access by group/element (`get`, `put`, `all`) |
+| `DICOM\Tag` | Enum of known tags |
+| `DICOM\Convert` | JPEG render, thumbnail, JPEG/PDF import, multiframe video |
+| `DICOM\Compress` | Compress / decompress pixel data |
+| `DICOM\Value\*` | `PersonName`, `Date`, `Time`, `DateTime`, `UID` value objects |
+| `PACS\EchoSCU` | C-ECHO verification |
+| `PACS\SCU` | C-STORE send (`send`, `sendDirectory`) |
+| `PACS\SCP` | C-STORE receive server |
+| `PACS\Peer` / `PACS\Association` / `PACS\TransferSyntaxProposal` | Connection, AE, and negotiation settings |
+| `DCMTK\Toolkit` | Locates the DCMTK binaries (PATH or an explicit directory) |
 
-### Standalone functions
+### Compatibility shim (deprecated)
 
-| Function | Purpose |
-|----------|---------|
-| `is_dcm($file)` | Returns 1 if the file is valid DICOM, 0 otherwise |
-| `Execute($command)` | Shell execution wrapper (captures stdout + stderr) |
+| Class / function | v2 replacement |
+|---|---|
+| `dicom_tag` | `DICOM\File` / `DICOM\Dataset` |
+| `dicom_convert` | `DICOM\Convert` / `DICOM\Compress` |
+| `dicom_net` | `PACS\EchoSCU` / `PACS\SCU` / `PACS\SCP` |
+| `is_dcm($file)` | `DICOM\File::isDICOM($path)` |
+| `Execute($command)` | `DCMTK\Tool` (internal) |
 
 ## Examples
 
-The `examples/` directory contains working scripts for common operations:
+Each script in `examples/` is a v1-to-v2 migration recipe.
 
-| File | Description |
-|------|-------------|
-| `get_tags.php` | Read and display tags from a DICOM file |
-| `get_tags_webbased.php` | Same, formatted for browser output |
-| `write_tags.php` | Modify tags in a DICOM file |
-| `dcm_to_jpg.php` | Convert DICOM to JPEG |
-| `jpg_to_dcm.php` | Convert JPEG to DICOM with custom tags |
-| `jpg_to_dcm.xml` | XML template for JPEG-to-DICOM conversion |
-| `compress.php` | JPEG lossless compress a DICOM file |
-| `uncompress.php` | Decompress a DICOM file |
-| `send_dcm.php` | Send a DICOM file to a remote host |
-| `send_directory.php` | Send all files in a directory |
-| `store_server.php` | Start a DICOM receive server |
-| `store_server_handler.php` | Handler script called after each received file |
-| `store_server_config.cfg` | Configuration for the receive server |
+| File | Operation |
+|---|---|
+| `get_tags.php`, `get_tags_webbased.php` | Read tags |
+| `write_tags.php` | Write tags |
+| `dcm_to_jpg.php` | Render to JPEG + thumbnail |
+| `jpg_to_dcm.php` | Build a DICOM from a JPEG |
+| `compress.php`, `uncompress.php` | Compress / decompress |
+| `send_dcm.php` | C-STORE send one file |
+| `send_directory.php` | Send and archive a directory |
+| `store_server.php`, `store_server_handler.php`, `store_server_config.cfg` | C-STORE receive server |
 
 ## Acknowledgments
 
