@@ -2,7 +2,7 @@
 
 Companion to [`v2-rewrite-plan.md`](v2-rewrite-plan.md) (see its sections 8 and 9). The shim is newly authored, delegating code that re-exposes the frozen v1 public surface over the `DICOM\`/`PACS\` wrappers, emits deprecation notices, softens v2's stricter failures so an upgrade to `^2` cannot turn a working call fatal, removes the legacy `class_dicom.php`, and absorbs the three conversion entry points deferred from Phase 3.
 
-Everything here is reconstructed from clean-room-safe sources only: the reflected footprint ([`v1-surface.json`](v1-surface.json)), the capability map ([`v1-capability-map.md`](v1-capability-map.md)), the published README/`examples/`, and empirical blackbox observation of v1 (PHP loads and *runs* the legacy file; its source is never read). The legacy source stays closed (rewrite plan section 2).
+Everything here is reconstructed from clean-room-safe sources only: the reflected footprint (`v1-surface.json`), the capability map ([`v1-capability-map.md`](v1-capability-map.md)), the published README/`examples/`, and empirical blackbox observation of v1 (PHP loads and *runs* the legacy file; its source is never read). The legacy source stays closed (rewrite plan section 2).
 
 ---
 

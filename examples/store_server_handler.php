@@ -1,46 +1,41 @@
-#!/usr/bin/php
-<?PHP
-#
-# Processes files received by store_server.php 
-#
+#!/usr/bin/env php
+<?php
 
-function logger($message) {
-  $now_time = date("Ymd G:i:s");
+/**
+ * Migration example -- post-reception handler invoked by store_server.
+ *
+ * storescp calls this once per received object with v1's placeholder order
+ * #p #f #c #a: storage dir, filename, called AE (the receiver), calling AE (the
+ * sender). v1's example handler mislabeled the last two args; this corrects them.
+ *
+ * Before (v1): $d = new dicom_tag; $d->get_tag('0010', '0010');
+ * After (v2-native): DICOM\File typed accessor.
+ */
 
-  $message = "$now_time - $message";
+declare(strict_types=1);
 
-  $fh = fopen("dcm_temp/store_server.log", 'a') or die("can't open file");
-  fwrite($fh, "$message\n");
-  fclose($fh);
+require_once __DIR__ . '/../vendor/autoload.php';
 
-  print "$message\n";
+use DICOM\File;
+use DICOM\Tag;
 
+$dir = $argv[1] ?? '';
+$name = $argv[2] ?? '';
+$calledAE = $argv[3] ?? '';    // #c -- the AE we received as
+$callingAE = $argv[4] ?? '';   // #a -- the AE that sent to us
+$path = $dir . '/' . $name;
+
+function logLine(string $message): void
+{
+    $line = date('Ymd G:i:s') . ' - ' . $message;
+    file_put_contents(__DIR__ . '/dcm_temp/store_server.log', $line . "\n", FILE_APPEND);
+    echo $line . "\n";
 }
 
-
-require_once('../class_dicom.php');
-
-$dir = (isset($argv[1]) ? $argv[1] : '');
-$file = (isset($argv[2]) ? $argv[2] : '');
-$sent_from_ae = (isset($argv[3]) ? $argv[3] : '');
-$sent_to_ae = (isset($argv[4]) ? $argv[4] : '');
-
-if(!$file || !$dir) {
-  print "USAGE: SHOULD BE CALLED BY store_server.php\n";
-  exit;
+if ($name === '' || $dir === '' || !is_file($path)) {
+    logLine("missing or nonexistent file: {$path}");
+    exit(1);
 }
 
-$d = new dicom_tag;
-$d->file = "$dir/$file";
-
-if(!file_exists($d->file)) {
-  logger($d->file . ": does not exist");
-  exit;
-}
-
-
-$d->load_tags();
-$name = $d->get_tag('0010', '0010');
-logger("Received $name from $sent_to_ae -> $sent_from_ae");
-
-?>
+$patient = File::open($path)->getPersonName(Tag::PatientName)?->toDICOM() ?? '(unknown)';
+logLine("Received {$patient} (called AE {$calledAE} <- calling AE {$callingAE})");

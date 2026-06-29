@@ -1,35 +1,36 @@
-#!/usr/bin/php
-<?PHP
-#
-# Creates a jpeg and jpeg thumbnail of a DICOM file 
-#
+#!/usr/bin/env php
+<?php
 
-require_once('../class_dicom.php');
+/**
+ * Migration example -- render a DICOM image to a JPEG and a thumbnail.
+ *
+ * Before (v1, via the deprecated shim):
+ *     $d = new dicom_convert; $d->file = $file;
+ *     $d->dcm_to_jpg();   // wrote $file.jpg
+ *     $d->dcm_to_tn();    // wrote $file_tn.jpg
+ *
+ * After (v2-native): DICOM\Convert -- one object, explicit output paths, no shim.
+ */
 
-$file = (isset($argv[1]) ? $argv[1] : '');
+declare(strict_types=1);
 
-if(!$file) {
-  print "USAGE: ./dcm_to_jpg.php <FILE>\n";
-  exit;
+require_once __DIR__ . '/../vendor/autoload.php';
+
+use DICOM\Convert;
+use DICOM\File;
+
+$path = $argv[1] ?? '';
+if ($path === '' || !is_file($path)) {
+    fwrite(STDERR, "USAGE: dcm_to_jpg.php <FILE>\n");
+    exit(1);
 }
 
-if(!file_exists($file)) {
-  print "$file: does not exist\n";
-  exit;
-}
+$base = sys_get_temp_dir() . '/' . pathinfo($path, PATHINFO_FILENAME);
+$convert = new Convert(File::open($path));
+$convert->toJPEG($base . '.jpg');           // replaces dcm_to_jpg()
+$convert->toThumbnail($base . '_tn.jpg');   // replaces dcm_to_tn()
 
-$job_start = time();
+echo "Wrote {$base}.jpg and {$base}_tn.jpg\n";
 
-$d = new dicom_convert;
-$d->file = $file;
-$d->dcm_to_jpg();
-$d->dcm_to_tn();
-
-system("ls -lsh $file*");
-
-$job_end = time();
-$job_time = $job_end - $job_start;
-print "Created JPEG and thumbnail in $job_time seconds.\n";
-
-
-?>
+// Windowing defaults to the first stored VOI window (as in v1); pass a
+// DICOM\Windowing or DICOM\Scale to toJPEG() to choose another.

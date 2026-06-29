@@ -30,22 +30,14 @@ exactly one place.
 - `docker/` -- **CI consumption.** A Dockerfile that runs `provision.sh`, published
   to GHCR so GitHub Actions pulls the prebuilt image instead of reinstalling per run.
 
-## `research/` -- Phase 0.5 surface & capability inventory
+## `research/` -- DCMTK blackbox helpers
 
-One-off tooling that freezes what v1 *is*, so v2 targets a fixed contract instead of overbuilding.
-Run in the dev container (via `devenv/lxc/ct_exec.py`); the outputs land in `docs/`.
+Tooling for observing what DCMTK actually does, used while building and verifying the wrappers.
+Run in the dev container (via `devenv/lxc/ct_exec.py`).
 
-- `reflectV1Surface.php` -- includes the legacy library and emits its public surface (classes ->
-  public methods/constants/properties, plus top-level functions) as deterministic JSON. It finds
-  the symbols by diffing the declared classes/functions across the include, so it never reads the
-  source text, and reflection yields signatures, not bodies -- clean-room, interface facts only.
-  Output: `docs/v1-surface.json` (the frozen contract for the v2 compatibility shim).
 - `makeToolShims.sh` -- installs logging wrappers in `/usr/local/bin` (v1's default `TOOLKIT_DIR`)
   for every DCMTK binary (`dpkg -L dcmtk`) plus `ffmpeg`; each records `tool + argv` to a log, then
-  exec's the real tool. This is how the next step learns which tool each operation actually calls.
-- `exerciseV1Surface.php` -- drives each public method over the staged fixtures so the shims capture
-  the calls, writing an `### OP` marker before each so calls attribute to operations. Calls the
-  public API only (usage, never the source). Feeds `docs/v1-capability-map.md`.
+  exec's the real tool, so you can see which tool each operation actually calls.
 - `makeMultiframeFixture.py` -- synthesizes a small multi-frame DICOM (pydicom only) so
   `multiframe_to_video` can be exercised far enough to capture its DCMTK + `ffmpeg` invocation.
 

@@ -1,25 +1,24 @@
-<?PHP
-#
-# You can call this from a URL and it'll print out the header for dean.dcm
-#
-require_once('../class_dicom.php');
+<?php
 
-$file = 'dean.dcm';
+/**
+ * Migration example -- read tags from a web request (prints dean.dcm's header).
+ *
+ * Before (v1): $d = new dicom_tag; $d->load_tags(); $d->get_tag('0010', '0010');
+ * After (v2-native): typed accessors on DICOM\File, plus the full map when needed.
+ */
 
-if(!file_exists($file)) {
-  print "$file: does not exist\n";
-  exit;
-}
+declare(strict_types=1);
 
-$d = new dicom_tag;
-$d->file = $file;
-$d->load_tags();
+require_once __DIR__ . '/../vendor/autoload.php';
 
-print "<pre>";
+use DICOM\File;
+use DICOM\Tag;
 
-print_r($d->tags);
+header('Content-Type: text/plain; charset=utf-8');
 
-$name = $d->get_tag('0010', '0010');
-print "Name: $name\n";
+$file = File::open(__DIR__ . '/dean.dcm');
 
-?>
+echo 'Patient:  ' . $file->getPersonName(Tag::PatientName)?->toDICOM() . "\n";
+echo 'Modality: ' . $file->getText(Tag::Modality) . "\n\n";
+
+print_r($file->dataset()->all());

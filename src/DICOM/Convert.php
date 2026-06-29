@@ -10,26 +10,31 @@ use DICOM\Exception\ConversionException;
 
 /**
  * Image conversion via DCMTK. An instance is constructed from a verified File and
- * renders it to an image (DICOM -> image); the static fromJpeg goes the other way
- * (image -> DICOM). Every method writes a new output file at the path it is given
- * and never mutates the process working directory.
+ * renders it to an image (DICOM -> image) or assembles its frames into a video
+ * with ffmpeg (toVideo); the static fromJpeg goes the other way (image -> DICOM).
+ * Every method writes a new output file at the path it is given and never mutates
+ * the process working directory.
  *
  * Operational failures are DICOM\Exception\ExceptionInterface: IOException (a
  * source vanished or could not be read), ConversionException (the toolkit refused
- * the conversion -- no pixel data, an absent VOI window, an unsupported image, or
- * mismatched multiframe dimensions), ToolkitException (the tool was missing or
- * could not start). A misuse -- an out-of-range quality, an empty image list, or a
- * single-frame SOP class with multiple frames -- raises \InvalidArgumentException.
+ * the conversion -- no pixel data, an absent VOI window, an unsupported image,
+ * mismatched multiframe dimensions, or ffmpeg missing or failing to assemble the
+ * video), ToolkitException (the tool was missing or could not start). A misuse --
+ * an out-of-range quality, an empty image list, or a single-frame SOP class with
+ * multiple frames -- raises \InvalidArgumentException.
  */
 final class Convert
 {
     private readonly Toolkit $toolkit;
+    private readonly VideoEncoder $videoEncoder;
 
     public function __construct(
         private readonly File $source,
         ?Toolkit $toolkit = null,
+        ?VideoEncoder $videoEncoder = null,
     ) {
         $this->toolkit = $toolkit ?? new Toolkit();
+        $this->videoEncoder = $videoEncoder ?? new VideoEncoder();
     }
 
     /**
@@ -100,9 +105,8 @@ final class Convert
      * Each frame is written to "{outputPathPrefix}.{index}.jpg" (zero-based) -- the
      * naming dcmj2pnm produces under all-frames extraction. A single-frame object
      * yields one file, "{outputPathPrefix}.0.jpg". Windowing, scaling, and quality
-     * behave as in toJPEG and apply uniformly to every frame. Turning the frames
-     * into a video is deliberately out of scope: that is an ffmpeg job with no
-     * DCMTK equivalent, left to the caller.
+     * behave as in toJPEG and apply uniformly to every frame. To assemble the
+     * frames into a video, use toVideo(), which builds on this method.
      *
      * @return list<string> the created frame file paths, in frame order
      *
@@ -153,6 +157,63 @@ final class Convert
         }
 
         return $paths;
+    }
+
+    /**
+     * Render every frame and assemble them into a video at $outputPath via ffmpeg.
+     *
+     * Frames are rendered to a private temporary directory (the same per-frame
+     * rendering as toJpegFrames) and handed to the VideoEncoder; the temporary
+     * frames are always removed afterward, and the working directory is never
+     * changed. timing defaults to ten frames per second and format to MP4
+     * (H.264); pass a FrameTiming or VideoFormat to tune pacing or container.
+     * Windowing, scaling, and quality apply to every frame as in toJpegFrames.
+     *
+     * @throws \\InvalidArgumentException quality is outside [0, 100]
+     * @throws \\DICOM\\Exception\\IOException the source vanished or became unreadable
+     * @throws ConversionException a frame could not be rendered (no pixel data or an
+     *   absent VOI window), or ffmpeg was missing or failed to assemble the video
+     * @throws \\DICOM\\Exception\\ToolkitException dcmj2pnm is missing or could not be started
+     */
+    public function toVideo(
+        string $outputPath,
+        ?FrameTiming $timing = null,
+        ?VideoFormat $format = null,
+        ?Windowing $windowing = null,
+        ?Scale $scale = null,
+        int $quality = 100,
+    ): void {
+        $timing ??= FrameTiming::framesPerSecond(10.0);
+        $format ??= VideoFormat::mp4();
+
+        $workspace = self::makeTempDirectory();
+        try {
+            $prefix = $workspace . '/frame';
+            $this->toJpegFrames($prefix, $windowing, $quality, $scale);
+            $this->videoEncoder->assemble($prefix . '.%d.jpg', $timing, $format, $outputPath);
+        } finally {
+            self::removeTempDirectory($workspace);
+        }
+    }
+
+    private static function makeTempDirectory(): string
+    {
+        $directory = sys_get_temp_dir() . '/dicomVideo' . bin2hex(random_bytes(8));
+        if (!mkdir($directory, 0700) && !is_dir($directory)) {
+            throw new ConversionException(
+                "Could not create a temporary directory for video frames at '{$directory}'."
+            );
+        }
+
+        return $directory;
+    }
+
+    private static function removeTempDirectory(string $directory): void
+    {
+        foreach (glob($directory . '/*') ?: [] as $file) {
+            @unlink($file);
+        }
+        @rmdir($directory);
     }
 
     /**

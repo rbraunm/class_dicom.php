@@ -50,6 +50,11 @@ install_dcmtk() {
   apt-get install -y --no-install-recommends dcmtk
 }
 
+install_ffmpeg() {
+  log "ffmpeg (Debian package; provides ffmpeg + ffprobe for video assembly)"
+  apt-get install -y --no-install-recommends ffmpeg
+}
+
 install_python_oracle() {
   log "Python venv with pydicom/pynetdicom at ${VENV_DIR}"
   apt-get install -y --no-install-recommends python3 python3-venv
@@ -76,8 +81,13 @@ install_composer() {
 
 verify() {
   log "installed versions"
-  "${PHP_BIN}" -v | head -1
-  dcmdump --version | head -1
+  # Print only the first line of each tool's banner. sed -n '1p' reads the stream
+  # to EOF rather than closing the pipe after one line as `head -1` would; under
+  # `set -o pipefail` an early close SIGPIPEs the producer (exit 141) and aborts
+  # the build, which is fatal for multi-line banners like ffmpeg's.
+  "${PHP_BIN}" -v | sed -n '1p'
+  dcmdump --version | sed -n '1p'
+  ffmpeg -version | sed -n '1p'
   "${COMPOSER_BIN}" --version
   "${VENV_DIR}/bin/python" -c "import pydicom, pynetdicom; print('pydicom', pydicom.__version__, 'pynetdicom', pynetdicom.__version__)"
 }
@@ -88,6 +98,7 @@ main() {
   install_base
   install_php
   install_dcmtk
+  install_ffmpeg
   install_python_oracle
   install_composer
   verify

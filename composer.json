@@ -15,8 +15,17 @@
         "psr-4": {
             "DICOM\\": "src/DICOM/",
             "PACS\\": "src/PACS/",
-            "DCMTK\\": "src/DCMTK/"
-        }
+            "DCMTK\\": "src/DCMTK/",
+            "Compat\\": "src/Compat/"
+        },
+        "files": [
+            "compat/functions.php"
+        ],
+        "classmap": [
+            "compat/dicom_tag.php",
+            "compat/dicom_convert.php",
+            "compat/dicom_net.php"
+        ]
     },
     "autoload-dev": {
         "psr-4": {

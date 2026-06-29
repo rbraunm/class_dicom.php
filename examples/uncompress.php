@@ -1,39 +1,32 @@
-#!/usr/bin/php
-<?PHP
-#
-# Uncompress a DICOM file 
-#
+#!/usr/bin/env php
+<?php
 
-require_once('../class_dicom.php');
+/**
+ * Migration example -- decompress a DICOM file.
+ *
+ * Before (v1, via the deprecated shim):
+ *     $c = new dicom_convert; $c->file = $file; $c->uncompress('uncompressed.dcm');
+ *
+ * After (v2-native): DICOM\Compress::decompress(), with File::transferSyntaxUID().
+ */
 
-$file = (isset($argv[1]) ? $argv[1] : '');
+declare(strict_types=1);
 
-if(!$file) {
-  print "USAGE: ./uncompress.php <FILE>\n";
-  exit;
+require_once __DIR__ . '/../vendor/autoload.php';
+
+use DICOM\Compress;
+use DICOM\File;
+
+$path = $argv[1] ?? '';
+if ($path === '' || !is_file($path)) {
+    fwrite(STDERR, "USAGE: uncompress.php <FILE>\n");
+    exit(1);
 }
 
-if(!file_exists($file)) {
-  print "$file: does not exist\n";
-  exit;
-}
+$source = File::open($path);
+echo 'Original:     ' . $source->transferSyntaxUID() . ' (' . filesize($path) . " bytes)\n";
 
-$d = new dicom_tag;
-$d->file = $file;
-$d->load_tags();
-$ts = $d->get_tag('0002', '0010');
-$fsize = filesize($d->file);
-print "Original: $ts ($fsize)\n";
+$out = sys_get_temp_dir() . '/uncompressed.dcm';
+$result = (new Compress($source))->decompress($out);
 
-$c = new dicom_convert;
-$c->file = $file;
-$c->uncompress('uncompressed.dcm');
-
-
-$d->file = 'uncompressed.dcm';
-$d->load_tags();
-$ts = $d->get_tag('0002', '0010');
-$fsize = filesize($d->file);
-print "Uncompressed: $ts ($fsize)\n";
-
-?>
+echo 'Uncompressed: ' . $result->transferSyntaxUID() . ' (' . filesize($out) . " bytes)\n";

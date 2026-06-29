@@ -2,7 +2,7 @@
 
 For each v1 public operation, the external command-line tool(s) it invokes and the
 argv observed when the operation runs. This is the second Phase 0.5 artifact (the first
-is [`v1-surface.json`](v1-surface.json), the reflected public surface). Together they fix
+is `v1-surface.json`, the reflected public surface). Together they fix
 the v1 contract the v2 rewrite must reproduce.
 
 **Capture method.** Empirical. The committed research harness drives every public entry
