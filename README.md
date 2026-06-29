@@ -4,7 +4,7 @@ A PHP library for working with DICOM medical images: tag reading and writing, JP
 
 Version 2 is a clean-room rewrite on PHP 8.5 with a first-class object API (`DICOM\*`, `PACS\*`) and value objects for dates, names, and UIDs. The original procedural surface (`dicom_tag`, `dicom_convert`, `dicom_net`, and the global helpers) is preserved as a compatibility shim so v1 code keeps running unchanged -- it now emits deprecation notices pointing at the v2 equivalents. See [Migrating from v1](#migrating-from-v1).
 
-Originally created by Dean Vaughan ([deanvaughan.org](http://www.deanvaughan.org/projects/class_dicom_php/)).
+Acknowledges the original `class_dicom.php` by Dean Vaughan ([deanvaughan.org](http://www.deanvaughan.org/projects/class_dicom_php/)) as a conceptual predecessor; v2 shares no code with it (see [NOTICE](NOTICE)).
 
 ## Requirements
 
