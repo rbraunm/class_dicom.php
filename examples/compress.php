@@ -2,16 +2,10 @@
 <?php
 
 /**
- * Migration example -- compress a DICOM file (lossless JPEG by default).
+ * Example -- compress a DICOM file (lossless JPEG by default).
  *
- * Before (v1, removed in v3): read the transfer syntax by raw address,
- * then dicom_convert::compress():
- *     $d = new dicom_tag; $d->file = $file; $d->load_tags();
- *     $ts = $d->get_tag('0002', '0010');
- *     $c = new dicom_convert; $c->file = $file; $c->compress('compressed.dcm');
- *
- * After (v2-native): DICOM\Compress, and File::transferSyntaxUID() instead of a raw
- * address. The default mode is lossless SV1, matching v1.
+ * Uses DICOM\Compress and File::transferSyntaxUID(). The default mode is
+ * lossless SV1.
  */
 
 declare(strict_types=1);

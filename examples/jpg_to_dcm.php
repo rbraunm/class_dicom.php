@@ -2,19 +2,11 @@
 <?php
 
 /**
- * Migration example -- build a DICOM image from a JPEG.
+ * Example -- build a DICOM image from a JPEG.
  *
- * Before (v1, removed in v3): a dcm2xml template (jpg_to_dcm.xml) full of
- * (gggg,eeee) placeholders, filled from a raw $tags array, with study/series/SOP
- * UIDs hand-built in the template:
- *     $d = new dicom_convert;
- *     $d->jpg_file = 'test.jpg'; $d->template = 'jpg_to_dcm.xml'; $d->temp_dir = 'dcm_temp';
- *     $dcm = $d->jpg_to_dcm(['0010,0010' => 'VAUGHAN^DEAN', '0020,000d' => '...', ...]);
- *
- * After (v2-native): Convert::fromJpeg() builds the Secondary Capture object and
- * GENERATES the study/series/SOP UIDs (StudySeriesSource::generate()), then typed
- * setters fill the identifying tags. No template and no hand-built UIDs -- the old
- * jpg_to_dcm.xml is obsolete.
+ * Convert::fromJpeg() builds the Secondary Capture object and generates the
+ * study/series/SOP UIDs (StudySeriesSource::generate()), then typed setters
+ * fill the identifying tags.
  */
 
 declare(strict_types=1);

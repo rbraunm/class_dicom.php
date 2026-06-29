@@ -2,17 +2,10 @@
 <?php
 
 /**
- * Migration example -- read DICOM tags.
+ * Example -- read DICOM tags.
  *
- * Before (v1, removed in v3) -- raw group/element addresses, because v1
- * had no typed accessors:
- *     $d = new dicom_tag($file);
- *     $d->load_tags();
- *     $name = $d->get_tag('0010', '0010');   // string, by address
- *
- * After (v2-native): named, typed, validated accessors keyed by the Tag enum. The
- * raw-address style was only ever a workaround for their absence; in v2 prefer the
- * typed accessors and fall back to the raw dataset only for tags without one.
+ * Named, typed, validated accessors keyed by the Tag enum. Prefer the typed
+ * accessors and fall back to the raw dataset only for tags without one.
  */
 
 declare(strict_types=1);
@@ -39,8 +32,8 @@ echo 'Study date:  ' . ($file->getDate(Tag::StudyDate)?->iso() ?? '(none)') . "\
 echo 'SOP UID:     ' . $file->getUID(Tag::SOPInstanceUID)?->value . "\n";
 
 // Need every tag (e.g. to dump the header)? The full map is still there,
-// keyed "gggg,eeee" (replaces v1's load_tags() + $d->tags):
+// keyed "gggg,eeee":
 print_r($file->dataset()->all());
 
-// Only for a tag with no typed accessor, the raw address still works
-// (replaces get_tag('GGGG', 'EEEE')):  $file->dataset()->get(0x0028, 0x0010);
+// Only for a tag with no typed accessor, the raw address still works:
+//   $file->dataset()->get(0x0028, 0x0010);

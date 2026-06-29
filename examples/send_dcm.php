@@ -2,16 +2,10 @@
 <?php
 
 /**
- * Migration example -- C-STORE send one DICOM file.
+ * Example -- C-STORE send one DICOM file.
  *
- * Before (v1, removed in v3):
- *     $d = new dicom_net; $d->file = $file;
- *     $out = $d->send_dcm('localhost', '104', 'DEANO', 'example');  // 0 ok, error string on fail
- *     // $d->transfer_syntax was accepted but did nothing.
- *
- * After (v2-native): a Peer + Association drive PACS\SCU, which throws on failure.
- * The real payoff: a TransferSyntaxProposal actually controls negotiation, where
- * v1's transfer_syntax property was inert.
+ * A Peer + Association drive PACS\SCU, which throws on failure. A
+ * TransferSyntaxProposal controls negotiation.
  */
 
 declare(strict_types=1);
@@ -35,7 +29,7 @@ $port = (int) ($argv[3] ?? 104);
 $peer = new Peer($host, $port, 'example');   // host, port, called AE
 $association = new Association('DEANO');      // calling AE
 
-// To actually negotiate a transfer syntax (v1 could not), pass a proposal:
+// To negotiate a specific transfer syntax, pass a proposal:
 //   new SCU($peer, $association, PACS\TransferSyntaxProposal::jpegLossless());
 $scu = new SCU($peer, $association);
 

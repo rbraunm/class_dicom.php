@@ -2,14 +2,11 @@
 <?php
 
 /**
- * Migration example -- send every DICOM file in a directory, moving each sent file.
+ * Example -- send every DICOM file in a directory, moving each sent file.
  *
- * Before (v1, removed in v3): an opendir/readdir loop calling send_dcm()
- * per file and renaming successes into a backup directory.
- *
- * After (v2-native): PACS\SCU::send() per file (one Peer/Association reused),
- * keeping v1's move-on-success behavior. For a one-shot bulk send with no per-file
- * tracking, $scu->sendDirectory($dir) sends the whole directory in one association.
+ * PACS\SCU::send() per file (one Peer/Association reused), moving each file on
+ * success. For a one-shot bulk send with no per-file tracking,
+ * $scu->sendDirectory($dir) sends the whole directory in one association.
  */
 
 declare(strict_types=1);

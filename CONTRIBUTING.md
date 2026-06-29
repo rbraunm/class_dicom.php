@@ -1,19 +1,8 @@
 # Contributing
 
-This is a clean-room, Apache-2.0 v2 rewrite of a PHP DICOM library that wraps the
-DCMTK command-line tools. This document is the working guide for everyone (human
-or agent) touching the code: how to source an implementation, the conventions, how
-to run the suite, and how CI gates changes.
-
-## Clean-room rule (v2)
-
-The legacy `class_dicom.php` is not opened, read, or referenced while writing v2
-code. Implement only from the DICOM standard (NEMA PS3), the DCMTK documentation,
-and the published v1 surface (README and `examples/`). The standard is the source
-of truth. Interface facts (names, signatures, observable behavior) are reusable;
-expression (bodies, structure, comments) is not. Reflection and black-box
-behavioral observation are permitted; reading the legacy source is not. See
-`docs/v2-rewrite-plan.md` and the frozen `docs/v1-surface.json`.
+This is an Apache-2.0 PHP DICOM library that wraps the DCMTK command-line tools.
+This document is the working guide for everyone (human or agent) touching the
+code: the conventions, how to run the suite, and how CI gates changes.
 
 ## Source file headers
 

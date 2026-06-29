@@ -35,7 +35,7 @@ exactly one place.
 Tooling for observing what DCMTK actually does, used while building and verifying the wrappers.
 Run in the dev container (via `devenv/lxc/ct_exec.py`).
 
-- `makeToolShims.sh` -- installs logging wrappers in `/usr/local/bin` (v1's default `TOOLKIT_DIR`)
+- `makeToolShims.sh` -- installs logging wrappers in `/usr/local/bin`
   for every DCMTK binary (`dpkg -L dcmtk`) plus `ffmpeg`; each records `tool + argv` to a log, then
   exec's the real tool, so you can see which tool each operation actually calls.
 - `makeMultiframeFixture.py` -- synthesizes a small multi-frame DICOM (pydicom only) so

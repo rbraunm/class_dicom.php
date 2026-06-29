@@ -14,7 +14,7 @@ use DICOM\Exception\ConversionException;
  * the path it is given, never mutates the process working directory, and returns
  * the opened result so it can be inspected or tagged further.
  *
- * Scope is JPEG, matching v1: compress wraps dcmcjpeg and decompress wraps
+ * Scope is JPEG: compress wraps dcmcjpeg and decompress wraps
  * dcmdjpeg. JPEG 2000 is not available in this DCMTK build and is a recorded gap.
  * Operational failures are DICOM\Exception\ExceptionInterface: IOException (the
  * source could not be read), ConversionException (the toolkit refused -- e.g. no
@@ -34,8 +34,8 @@ final class Compress
 
     /**
      * Compress the pixel data to a JPEG transfer syntax via dcmcjpeg, returning the
-     * opened result. The process defaults to lossless SV1, matching v1 (which is
-     * also dcmcjpeg's own default).
+     * opened result. The process defaults to lossless SV1, which is also
+     * dcmcjpeg's own default.
      *
      * @throws \InvalidArgumentException a lossy quality is outside [0, 100]
      * @throws \DICOM\Exception\IOException the source vanished or became unreadable

@@ -1,10 +1,9 @@
 <?php
 
 /**
- * Migration example -- read tags from a web request (prints dean.dcm's header).
+ * Example -- read tags from a web request (prints dean.dcm's header).
  *
- * Before (v1): $d = new dicom_tag; $d->load_tags(); $d->get_tag('0010', '0010');
- * After (v2-native): typed accessors on DICOM\File, plus the full map when needed.
+ * Typed accessors on DICOM\File, plus the full map when needed.
  */
 
 declare(strict_types=1);

@@ -2,14 +2,13 @@
 <?php
 
 /**
- * Migration example -- post-reception handler invoked by store_server.
+ * Example -- post-reception handler invoked by store_server.
  *
- * storescp calls this once per received object with v1's placeholder order
- * #p #f #c #a: storage dir, filename, called AE (the receiver), calling AE (the
- * sender). v1's example handler mislabeled the last two args; this corrects them.
+ * storescp calls this once per received object with placeholder order
+ * #p #f #c #a: storage dir, filename, called AE (the receiver), calling AE
+ * (the sender).
  *
- * Before (v1): $d = new dicom_tag; $d->get_tag('0010', '0010');
- * After (v2-native): DICOM\File typed accessor.
+ * Uses a DICOM\File typed accessor.
  */
 
 declare(strict_types=1);

@@ -2,17 +2,12 @@
 <?php
 
 /**
- * Migration example -- run a C-STORE SCP that stores received objects and runs a
- * handler per object.
+ * Example -- run a C-STORE SCP that stores received objects and runs a handler
+ * per object.
  *
- * Before (v1, removed in v3):
- *     $d = new dicom_net;
- *     $d->store_server(104, './dcm_temp', './store_server_handler.php',
- *                      'store_server_config.cfg', 1);   // blocking
- *
- * After (v2-native): PACS\SCP, configured explicitly. start() returns a handle; the
- * loop reproduces v1's foreground (blocking) server. The handler runs as a bare
- * command with v1's #p #f #c #a placeholders appended (so it must be executable).
+ * PACS\SCP, configured explicitly. start() returns a handle; the loop runs a
+ * foreground (blocking) server. The handler runs as a bare command with the
+ * #p #f #c #a placeholders appended (so it must be executable).
  */
 
 declare(strict_types=1);

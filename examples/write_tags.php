@@ -2,16 +2,11 @@
 <?php
 
 /**
- * Migration example -- write DICOM tags.
+ * Example -- write DICOM tags.
  *
- * Before (v1, removed in v3) -- raw "gggg,eeee" => string pairs, the only
- * option v1 offered:
- *     $d = new dicom_tag; $d->file = 'dean.dcm';
- *     $d->write_tags(['0010,0010' => 'VAUGHAN^DEAN', '0008,0080' => 'DEANLAND, AR']);
- *
- * After (v2-native): typed setters that take validated value objects and persist in
- * place. Prefer these; the raw Dataset::put() remains for tags without a setter.
- * This demo copies the source first so the bundled fixture is never mutated.
+ * Typed setters that take validated value objects and persist in place. Prefer
+ * these; the raw Dataset::put() remains for tags without a setter. This demo
+ * copies the source first so the bundled fixture is never mutated.
  */
 
 declare(strict_types=1);

@@ -4,19 +4,11 @@ Guidance for AI agents working in this repository. **Read `CONTRIBUTING.md` firs
 it is the canonical guide for conventions, the dev/test environment, and CI. The
 points below are the ones that must not be missed.
 
-## Critical: clean-room rule
-
-This is a clean-room, Apache-2.0 v2 rewrite. Never open, read, or reference the
-legacy `class_dicom.php` source. Implement only from the DICOM standard (NEMA PS3),
-the DCMTK documentation, and the published v1 surface (README, `examples/`,
-`docs/v1-surface.json`). Reflection and black-box behavioral observation are
-allowed; reading the legacy source is not.
-
 ## Where things live
 
 - Conventions, testing standards, dev/test environment, CI: `CONTRIBUTING.md`.
 - Tooling reference (provision, `ct_exec`, research harness): `tools/README.md`.
-- Plan and phase status: `docs/v2-rewrite-plan.md`, `ROADMAP.md`.
+- Roadmap: `ROADMAP.md`.
 
 ## Working norms
 
@@ -36,7 +28,7 @@ the human-developer paths in `CONTRIBUTING.md` (the CI image and the Proxmox LXC
 an agent has no container runtime, so it installs the toolchain directly. Egress
 hosts to whitelist are in `CONTRIBUTING.md` (Agent sandbox).
 
-The target is PHP 8.5 (the v2 baseline; see `docs/v2-rewrite-plan.md`) and the
+The target is PHP 8.5 and the
 stable DCMTK the distribution ships -- in this sandbox that is Ubuntu's `dcmtk`,
 which can differ from the pinned CI image. CI stays the authority for a green
 suite; the sandbox is for development iteration.

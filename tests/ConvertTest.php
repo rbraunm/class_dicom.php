@@ -108,8 +108,7 @@ final class ConvertTest extends TestCase
 
     public function testDoesNotMutateWorkingDirectory(): void
     {
-        // v1's multiframe path chdir'd globally and never restored it. Guard against
-        // that: a conversion must leave the process cwd untouched.
+        // A conversion must leave the process working directory untouched.
         $before = getcwd();
         (new Convert($this->image()))->toJPEG($this->outPath());
         $this->assertSame($before, getcwd());

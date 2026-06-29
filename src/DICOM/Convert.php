@@ -40,8 +40,8 @@ final class Convert
     /**
      * Render the image to a baseline JPEG at $outputPath via dcmj2pnm.
      *
-     * Windowing defaults to the first stored VOI window (matching v1's
-     * `dcm_to_jpg`); scaling defaults to none. Pass a Windowing or Scale to choose
+     * Windowing defaults to the first stored VOI window; scaling defaults to
+     * none. Pass a Windowing or Scale to choose
      * another mode. quality is the JPEG quality, 0..100.
      *
      * @throws \InvalidArgumentException quality is outside [0, 100]
@@ -80,7 +80,7 @@ final class Convert
     }
 
     /**
-     * Render a scaled-down JPEG thumbnail (v1's `dcm_to_tn`). A thin convenience
+     * Render a scaled-down JPEG thumbnail. A thin convenience
      * over toJPEG: the width is scaled to $widthPixels (aspect preserved) at a
      * lower default quality. Windowing defaults to the first stored VOI window.
      *
@@ -222,7 +222,7 @@ final class Convert
      * the File tag accessors.
      *
      * A single image with the default classic Secondary Capture SOP class yields a
-     * single-frame object (v1's `jpg_to_dcm`). Multiple images yield one multiframe
+     * single-frame object. Multiple images yield one multiframe
      * object, which requires SOPClass::newSC(); the classic class cannot hold more
      * than one frame, so that combination is rejected before img2dcm is invoked.
      * The images must share dimensions for a multiframe result; img2dcm fails loud
@@ -284,8 +284,7 @@ final class Convert
 
     /**
      * Create a DICOM Encapsulated PDF file from a PDF via pdf2dcm, returning the
-     * opened result so attributes can be stamped on it with the File tag accessors
-     * (this is v1's pdf_to_dcm territory).
+     * opened result so attributes can be stamped on it with the File tag accessors.
      *
      * pdf2dcm wraps the whole document as a single Encapsulated PDF Storage
      * instance -- there are no frames and only the one SOP class, so neither the
