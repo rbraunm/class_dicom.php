@@ -4,7 +4,7 @@
 /**
  * Migration example -- build a DICOM image from a JPEG.
  *
- * Before (v1, via the deprecated shim): a dcm2xml template (jpg_to_dcm.xml) full of
+ * Before (v1, removed in v3): a dcm2xml template (jpg_to_dcm.xml) full of
  * (gggg,eeee) placeholders, filled from a raw $tags array, with study/series/SOP
  * UIDs hand-built in the template:
  *     $d = new dicom_convert;

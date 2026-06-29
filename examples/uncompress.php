@@ -4,7 +4,7 @@
 /**
  * Migration example -- decompress a DICOM file.
  *
- * Before (v1, via the deprecated shim):
+ * Before (v1, removed in v3):
  *     $c = new dicom_convert; $c->file = $file; $c->uncompress('uncompressed.dcm');
  *
  * After (v2-native): DICOM\Compress::decompress(), with File::transferSyntaxUID().

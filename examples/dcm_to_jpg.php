@@ -4,7 +4,7 @@
 /**
  * Migration example -- render a DICOM image to a JPEG and a thumbnail.
  *
- * Before (v1, via the deprecated shim):
+ * Before (v1, removed in v3):
  *     $d = new dicom_convert; $d->file = $file;
  *     $d->dcm_to_jpg();   // wrote $file.jpg
  *     $d->dcm_to_tn();    // wrote $file_tn.jpg

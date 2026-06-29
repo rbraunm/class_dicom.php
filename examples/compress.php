@@ -4,7 +4,7 @@
 /**
  * Migration example -- compress a DICOM file (lossless JPEG by default).
  *
- * Before (v1, via the deprecated shim): read the transfer syntax by raw address,
+ * Before (v1, removed in v3): read the transfer syntax by raw address,
  * then dicom_convert::compress():
  *     $d = new dicom_tag; $d->file = $file; $d->load_tags();
  *     $ts = $d->get_tag('0002', '0010');

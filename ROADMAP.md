@@ -6,7 +6,7 @@ This package is a fork of Dean Vaughan's originally-unlicensed `class_dicom.php`
 
 The full plan -- clean-room discipline, licensing and provenance artifacts, architecture, capability scope, research methodology, phased delivery, testing, and done criteria -- lives in **[docs/v2-rewrite-plan.md](docs/v2-rewrite-plan.md)** and is maintained there only. This roadmap intentionally does not restate it.
 
-**Status (current):** the clean-room wrapper is landed through the `DICOM\` and `PACS\` layers -- detection, tags, conversion, compression, and DICOM networking (C-ECHO, C-STORE SCU and SCP) are complete and CI-green. The backward-compatibility shim and the docs/release step remain; phase-level detail is in the plan.
+**Status (current):** the clean-room wrapper is landed through the `DICOM\` and `PACS\` layers -- detection, tags, conversion, compression, and DICOM networking (C-ECHO, C-STORE SCU and SCP) are complete and CI-green. The shim and docs are complete; v2.0.0 is released. Phase-level detail is in the plan.
 
 ## v1.1.0 (current)
 
@@ -24,7 +24,7 @@ PHP 8.x compatibility fixes and an integration test suite.
 
 ## v3 -- expansion beyond v1
 
-v2 deliberately stops at v1's surface (see the plan). v3 is the post-v1 line: it drops the deprecated compatibility shim and grows the wrapper to cover more of the DCMTK toolset than v1 ever did. The goal is not full pydicom/pynetdicom parity but the operations that matter in a PHP web application receiving, routing, and serving DICOM images. Each item is another DCMTK tool wrapped under the same discipline as v2.
+v2 deliberately stops at v1's surface (see the plan). v3 is the post-v1 line. **3.0.0 removes the deprecated compatibility shim** -- the namespaced API becomes the only surface; subsequent 3.x minors grow the wrapper to cover more of the DCMTK toolset than v1 ever did. The goal is not full pydicom/pynetdicom parity but the operations that matter in a PHP web application receiving, routing, and serving DICOM images. Each item is another DCMTK tool wrapped under the same discipline as v2.
 
 ### DICOM networking
 

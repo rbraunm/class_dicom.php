@@ -4,7 +4,7 @@
 /**
  * Migration example -- send every DICOM file in a directory, moving each sent file.
  *
- * Before (v1, via the deprecated shim): an opendir/readdir loop calling send_dcm()
+ * Before (v1, removed in v3): an opendir/readdir loop calling send_dcm()
  * per file and renaming successes into a backup directory.
  *
  * After (v2-native): PACS\SCU::send() per file (one Peer/Association reused),

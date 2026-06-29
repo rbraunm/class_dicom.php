@@ -4,7 +4,7 @@
 /**
  * Migration example -- read DICOM tags.
  *
- * Before (v1, via the deprecated shim) -- raw group/element addresses, because v1
+ * Before (v1, removed in v3) -- raw group/element addresses, because v1
  * had no typed accessors:
  *     $d = new dicom_tag($file);
  *     $d->load_tags();

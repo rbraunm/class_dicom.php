@@ -4,7 +4,7 @@
 /**
  * Migration example -- C-STORE send one DICOM file.
  *
- * Before (v1, via the deprecated shim):
+ * Before (v1, removed in v3):
  *     $d = new dicom_net; $d->file = $file;
  *     $out = $d->send_dcm('localhost', '104', 'DEANO', 'example');  // 0 ok, error string on fail
  *     // $d->transfer_syntax was accepted but did nothing.

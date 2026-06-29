@@ -4,7 +4,7 @@
 /**
  * Migration example -- write DICOM tags.
  *
- * Before (v1, via the deprecated shim) -- raw "gggg,eeee" => string pairs, the only
+ * Before (v1, removed in v3) -- raw "gggg,eeee" => string pairs, the only
  * option v1 offered:
  *     $d = new dicom_tag; $d->file = 'dean.dcm';
  *     $d->write_tags(['0010,0010' => 'VAUGHAN^DEAN', '0008,0080' => 'DEANLAND, AR']);

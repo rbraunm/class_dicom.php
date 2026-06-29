@@ -5,7 +5,7 @@
  * Migration example -- run a C-STORE SCP that stores received objects and runs a
  * handler per object.
  *
- * Before (v1, via the deprecated shim):
+ * Before (v1, removed in v3):
  *     $d = new dicom_net;
  *     $d->store_server(104, './dcm_temp', './store_server_handler.php',
  *                      'store_server_config.cfg', 1);   // blocking

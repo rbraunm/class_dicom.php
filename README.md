@@ -2,7 +2,7 @@
 
 A PHP library for working with DICOM medical images: tag reading and writing, JPEG conversion, compression, multiframe-to-video, and DICOM networking (C-ECHO, C-STORE send and receive). It drives the [DCMTK](https://dicom.offis.de/dcmtk.php.en) command-line toolkit under a typed, namespaced PHP API.
 
-Version 2 is a clean-room rewrite on PHP 8.5 with a first-class object API (`DICOM\*`, `PACS\*`) and value objects for dates, names, and UIDs. The original procedural surface (`dicom_tag`, `dicom_convert`, `dicom_net`, and the global helpers) is preserved as a compatibility shim so v1 code keeps running unchanged -- it now emits deprecation notices pointing at the v2 equivalents. See [Migrating from v1](#migrating-from-v1).
+Version 2 is a clean-room rewrite on PHP 8.5 with a first-class object API (`DICOM\*`, `PACS\*`) and value objects for dates, names, and UIDs. The original procedural surface (`dicom_tag`, `dicom_convert`, `dicom_net`, and the global helpers) shipped in version 2 as a backward-compatibility shim; **version 3 removes that shim**, leaving the namespaced API as the only surface. See [Migrating from v1](#migrating-from-v1).
 
 Acknowledges the original `class_dicom.php` by Dean Vaughan ([deanvaughan.org](http://www.deanvaughan.org/projects/class_dicom_php/)) as a conceptual predecessor; v2 shares no code with it (see [NOTICE](NOTICE)).
 
@@ -157,21 +157,21 @@ while ($process->isRunning()) {
 
 ## Migrating from v1
 
-Existing v1 code runs unchanged against the compatibility shim, which emits deprecation notices:
+Version 2 shipped a compatibility shim so v1 code ran unchanged; **version 3 removes it**. The global `dicom_tag` / `dicom_convert` / `dicom_net` classes and helpers are gone -- v1 code must move to the namespaced API:
 
 ```php
-$d = new dicom_tag('/path/to/image.dcm');   // deprecated; use DICOM\File
+$d = new dicom_tag('/path/to/image.dcm');   // removed in v3
 $d->load_tags();
 $name = $d->get_tag('0010', '0010');
 ```
 
-The `examples/` directory contains a worked migration for every operation: each script shows the v1 form as a "Before" block and the runnable v2-native "After" that bypasses the shim. A full element-by-element mapping lives in [`docs/migration-v1-to-v2.md`](docs/migration-v1-to-v2.md).
+The `examples/` directory contains a worked migration for every operation: each script shows the v1 form as a "Before" block and the runnable v2-native "After". A full element-by-element mapping lives in [`docs/migration-v1-to-v2.md`](docs/migration-v1-to-v2.md).
 
 A few migration notes:
 
 - v1's raw `'gggg,eeee'` addresses were only necessary because v1 had no typed access. Prefer the typed accessors; the raw `Dataset` get/put remains for tags without one.
 - v1's `jpg_to_dcm()` XML template is gone -- `Convert::fromJpeg()` generates the UIDs and typed setters supply the tags.
-- `dicom_net::$transfer_syntax` was inert in v1 (it set nothing); the shim keeps it inert and warns. Use `PACS\TransferSyntaxProposal` with `PACS\SCU` for real negotiation.
+- `dicom_net::$transfer_syntax` was inert in v1 (it set nothing); and it is no longer present in v3. Use `PACS\TransferSyntaxProposal` with `PACS\SCU` for real negotiation.
 
 ## Testing
 
@@ -205,16 +205,6 @@ composer test
 | `PACS\SCP` | C-STORE receive server |
 | `PACS\Peer` / `PACS\Association` / `PACS\TransferSyntaxProposal` | Connection, AE, and negotiation settings |
 | `DCMTK\Toolkit` | Locates the DCMTK binaries (PATH or an explicit directory) |
-
-### Compatibility shim (deprecated)
-
-| Class / function | v2 replacement |
-|---|---|
-| `dicom_tag` | `DICOM\File` / `DICOM\Dataset` |
-| `dicom_convert` | `DICOM\Convert` / `DICOM\Compress` |
-| `dicom_net` | `PACS\EchoSCU` / `PACS\SCU` / `PACS\SCP` |
-| `is_dcm($file)` | `DICOM\File::isDICOM($path)` |
-| `Execute($command)` | `DCMTK\Tool` (internal) |
 
 ## Examples
 
